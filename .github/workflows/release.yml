@@ -1,0 +1,74 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET (from global.json)
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+          dotnet-quality: 'preview'
+
+      - name: Compute short SHA
+        id: sha
+        shell: bash
+        run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      # Build the WHOLE solution (App + Core + Cli + Tests) so anything that
+      # silently broke a sibling project — like a Modloader signature change
+      # the CLI never picked up — fails the build instead of shipping.
+      - name: Build solution
+        shell: pwsh
+        run: dotnet build MashiroLauncher.slnx -c Release --nologo
+
+      - name: Run tests
+        shell: pwsh
+        run: |
+          dotnet test tests/Launcher.Core.Tests/Launcher.Core.Tests.csproj `
+            -c Release --no-build --nologo `
+            --logger "console;verbosity=normal"
+
+      - name: Publish single-file Windows exe
+        shell: pwsh
+        run: |
+          dotnet publish src/Launcher.App/Launcher.App.csproj `
+            -c Release -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:IncludeAllContentForSelfExtract=true `
+            -p:EnableCompressionInSingleFile=true `
+            -p:GitCommit=${{ github.sha }} `
+            -p:BuildTime=${{ github.event.head_commit.timestamp }} `
+            -o publish
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $tag = "build-${{ steps.sha.outputs.short }}"
+          $title = "Build ${{ steps.sha.outputs.short }}"
+          $notes = @"
+          Auto-built from commit ${{ github.sha }}.
+
+          Built: ${{ github.event.head_commit.timestamp }}
+          Commit message: ${{ github.event.head_commit.message }}
+          "@
+          gh release create $tag `
+            publish/Launcher.App.exe `
+            --title $title `
+            --notes $notes `
+            --target ${{ github.sha }}
