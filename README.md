@@ -22,13 +22,13 @@
 
 ```bash
 dotnet build MashiroLauncher.slnx
-dotnet run --project src/Launcher.App/Launcher.App.csproj
+dotnet run --project src/MashiroLauncher.App/MashiroLauncher.App.csproj
 ```
 
 테스트:
 
 ```bash
-dotnet test tests/Launcher.Core.Tests/Launcher.Core.Tests.csproj
+dotnet test tests/MashiroLauncher.Core.Tests/MashiroLauncher.Core.Tests.csproj
 ```
 
 ## 인증과 보안

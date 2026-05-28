@@ -1,10 +1,10 @@
 <Solution>
   <Folder Name="/src/">
-    <Project Path="src/Launcher.App/Launcher.App.csproj" />
-    <Project Path="src/Launcher.Cli/Launcher.Cli.csproj" />
-    <Project Path="src/Launcher.Core/Launcher.Core.csproj" />
+    <Project Path="src/MashiroLauncher.App/MashiroLauncher.App.csproj" />
+    <Project Path="src/MashiroLauncher.Cli/MashiroLauncher.Cli.csproj" />
+    <Project Path="src/MashiroLauncher.Core/MashiroLauncher.Core.csproj" />
   </Folder>
   <Folder Name="/tests/">
-    <Project Path="tests/Launcher.Core.Tests/Launcher.Core.Tests.csproj" />
+    <Project Path="tests/MashiroLauncher.Core.Tests/MashiroLauncher.Core.Tests.csproj" />
   </Folder>
 </Solution>

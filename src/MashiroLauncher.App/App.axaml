@@ -1,0 +1,373 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="MashiroLauncher.App.App"
+             RequestedThemeVariant="Dark">
+
+    <Application.Resources>
+        <!-- Montserrat first (Latin glyphs), Noto Sans KR as fallback for Korean. -->
+        <FontFamily x:Key="UiFont">avares://MashiroLauncher/Assets/Fonts#Montserrat, avares://MashiroLauncher/Assets/Fonts#Noto Sans KR</FontFamily>
+    </Application.Resources>
+
+    <Application.Styles>
+        <FluentTheme />
+
+        <Style Selector="Window">
+            <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+        </Style>
+
+        <Style Selector=":is(TextBox)">
+            <Setter Property="Background" Value="#28FFFFFF" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="BorderBrush" Value="#40FFFFFF" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Padding" Value="10,8" />
+            <Setter Property="FontSize" Value="14" />
+        </Style>
+
+        <Style Selector="ComboBox">
+            <Setter Property="Background" Value="#28FFFFFF" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="BorderBrush" Value="#40FFFFFF" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Padding" Value="10,8" />
+            <Setter Property="FontSize" Value="14" />
+        </Style>
+
+        <!-- PLAY button: frosted-glass look, sized to match input fields. -->
+        <Style Selector="Button.play">
+            <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="LetterSpacing" Value="3" />
+            <Setter Property="Background" Value="#22FFFFFF" />
+            <Setter Property="BorderBrush" Value="#55FFFFFF" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="0:0:0.12" />
+                    <BrushTransition Property="BorderBrush" Duration="0:0:0.12" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.play /template/ ContentPresenter">
+            <Setter Property="Background" Value="{TemplateBinding Background}" />
+            <Setter Property="CornerRadius" Value="6" />
+        </Style>
+        <Style Selector="Button.play:pointerover">
+            <Setter Property="Background" Value="#3DFFFFFF" />
+            <Setter Property="BorderBrush" Value="#88FFFFFF" />
+        </Style>
+        <Style Selector="Button.play:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#3DFFFFFF" />
+        </Style>
+        <Style Selector="Button.play:pressed">
+            <Setter Property="Background" Value="#14FFFFFF" />
+            <Setter Property="BorderBrush" Value="#55FFFFFF" />
+        </Style>
+        <Style Selector="Button.play:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="#14FFFFFF" />
+        </Style>
+        <Style Selector="Button.play:disabled">
+            <Setter Property="Opacity" Value="0.5" />
+        </Style>
+
+        <Style Selector="Button.ghost">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="#DDFFFFFF" />
+            <Setter Property="BorderBrush" Value="#40FFFFFF" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="6" />
+            <!-- Tightened from 12,8 so a button's inner text sits ~5px from its
+                 border, close enough to the label's 2px margin above to read
+                 as visually aligned. -->
+            <Setter Property="Padding" Value="6,4" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.ghost:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#20FFFFFF" />
+        </Style>
+
+        <!-- Use "aligned" variant when a ghost button sits directly below a
+             .label TextBlock. Negative left margin pulls the button so its
+             inner text (which is offset by border+padding) lines up with the
+             label's text instead of its border. -->
+        <Style Selector="Button.ghost.aligned">
+            <Setter Property="Margin" Value="-3,0,0,0" />
+        </Style>
+
+        <!-- Indeterminate progress strip for mod install buttons. Used inline
+             alongside "설치 중..." text. ProgressBar's built-in indeterminate
+             animation is animator-safe across Avalonia 12 versions, unlike
+             custom RenderTransform tweens. -->
+        <Style Selector="ProgressBar.spinner">
+            <Setter Property="Width" Value="48" />
+            <Setter Property="Height" Value="3" />
+            <Setter Property="IsIndeterminate" Value="True" />
+            <Setter Property="Foreground" Value="#5BC54E" />
+            <Setter Property="Background" Value="#3A3A3A" />
+        </Style>
+
+        <!-- Circular spinner. Built from an Ellipse with a dash-array stroke so
+             a single rotating ring shows a moving gap.  Animating RotateTransform.Angle
+             directly (rather than swapping the whole RenderTransform) avoids the
+             "No animator registered for RenderTransform" crash we hit earlier. -->
+        <Style Selector="Ellipse.circleSpinner">
+            <Setter Property="Width" Value="14" />
+            <Setter Property="Height" Value="14" />
+            <Setter Property="Stroke" Value="#5BC54E" />
+            <Setter Property="StrokeThickness" Value="2" />
+            <Setter Property="StrokeDashArray" Value="6,4,2,4" />
+            <Setter Property="RenderTransformOrigin" Value="50%,50%" />
+            <Setter Property="RenderTransform">
+                <RotateTransform />
+            </Setter>
+            <Style.Animations>
+                <Animation IterationCount="INFINITE" Duration="0:0:1">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="RotateTransform.Angle" Value="0" />
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="RotateTransform.Angle" Value="360" />
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+
+        <!-- One-shot fade + lift-up animation for the Welcome card. Fires
+             whenever the Border attaches to the visual tree (i.e. cold launch
+             or coming back from GoBack), so the entry feels intentional rather
+             than just popping into existence. FillMode=Forward leaves it at
+             the final values so subsequent layout doesn't snap.
+             RenderTransform is pre-set to a TranslateTransform so we can
+             animate TranslateTransform.Y directly — Avalonia 12 has no
+             animator for the polymorphic RenderTransform property itself. -->
+        <Style Selector="Border.welcomeFadeIn">
+            <Setter Property="RenderTransform">
+                <TranslateTransform />
+            </Setter>
+            <Style.Animations>
+                <!-- Delay lets the window paint first; FillMode=Both forces the
+                     "0%" values (opacity 0 + translateY 16) BEFORE the animation
+                     starts, so the card stays hidden during that delay instead
+                     of flashing into place. Duration ~0.8s is long enough to
+                     register without feeling sluggish. -->
+                <Animation Duration="0:0:0.8" Delay="0:0:0.15"
+                           FillMode="Both" Easing="CubicEaseOut">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="Opacity" Value="0" />
+                        <Setter Property="TranslateTransform.Y" Value="16" />
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="Opacity" Value="1" />
+                        <Setter Property="TranslateTransform.Y" Value="0" />
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+
+        <!-- Mod search card; the .dim variant kicks in for hits that don't
+             support the currently-selected instance's modloader (paired with
+             the "사용 불가" chip in the action area). -->
+        <Style Selector="Border.modCard">
+            <Setter Property="Opacity" Value="1" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.12" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Border.modCard.dim">
+            <Setter Property="Opacity" Value="0.55" />
+        </Style>
+
+        <!-- Inline hyperlink-style button. No border, tight padding, dim color
+             that brightens on hover. Used by per-row "자세히 ▸" triggers etc. -->
+        <Style Selector="Button.link">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Foreground" Value="#5BC54E" />
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.link:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="TextElement.Foreground" Value="#8BE07E" />
+        </Style>
+
+        <Style Selector="Button.icon">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Width" Value="36" />
+            <Setter Property="Height" Value="36" />
+            <Setter Property="CornerRadius" Value="18" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.icon:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#30FFFFFF" />
+        </Style>
+
+        <Style Selector="TextBlock.label">
+            <Setter Property="Foreground" Value="#A0FFFFFF" />
+            <Setter Property="FontSize" Value="11" />
+            <!-- No left margin so the label aligns with the left edge of the
+                 input/button border below it, not with its inner text. -->
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="LetterSpacing" Value="1.0" />
+        </Style>
+
+        <!-- Settings sidebar category row. Reads "currently selected" via the .selected class. -->
+        <Style Selector="Button.settingsCategory">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="#A8FFFFFF" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Padding" Value="12,8" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Focusable" Value="False" />
+        </Style>
+        <Style Selector="Button.settingsCategory /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="CornerRadius" Value="4" />
+        </Style>
+        <Style Selector="Button.settingsCategory:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#15FFFFFF" />
+        </Style>
+        <Style Selector="Button.settingsCategory.selected /template/ ContentPresenter">
+            <Setter Property="Background" Value="#28FFFFFF" />
+        </Style>
+        <Style Selector="Button.settingsCategory.selected">
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+
+        <Style Selector="TextBlock.sectionTitle">
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="FontSize" Value="22" />
+            <Setter Property="FontWeight" Value="Light" />
+            <Setter Property="Margin" Value="0,0,0,14" />
+        </Style>
+
+        <Style Selector="Border.comingSoon">
+            <Setter Property="Background" Value="#12FFFFFF" />
+            <Setter Property="BorderBrush" Value="#28FFFFFF" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="20" />
+        </Style>
+
+        <!-- Floating status toast — fades in via opacity when the message becomes non-empty. -->
+        <Style Selector="Border.statusToast">
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="IsHitTestVisible" Value="False" />
+            <Setter Property="RenderTransform" Value="translateY(6px)" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.22" Easing="CubicEaseOut" />
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.22" Easing="CubicEaseOut" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Border.statusToast.show">
+            <Setter Property="Opacity" Value="1" />
+            <Setter Property="IsHitTestVisible" Value="True" />
+            <Setter Property="RenderTransform" Value="translateY(0)" />
+        </Style>
+
+        <Style Selector="TextBlock.hint">
+            <Setter Property="Foreground" Value="#80FFFFFF" />
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="Margin" Value="2,2,0,0" />
+            <Setter Property="LetterSpacing" Value="0.3" />
+        </Style>
+        <Style Selector="TextBlock.hint.warning">
+            <Setter Property="Foreground" Value="#FFB74D" />
+        </Style>
+
+        <Style Selector=":is(TextBox).invalid">
+            <Setter Property="BorderBrush" Value="#FFB74D" />
+        </Style>
+        <Style Selector=":is(TextBox).invalid:focus /template/ Border#PART_BorderElement">
+            <Setter Property="BorderBrush" Value="#FFB74D" />
+        </Style>
+
+        <!-- Account-choice button (Welcome + AccountSelection screens). Visually
+             matches the USERNAME / VERSION TextBoxes and the PLAY button — same
+             translucent #28FFFFFF fill, #40FFFFFF border, CornerRadius 6 — so
+             every interactive element on the entry screens reads as one family.
+             ContentPresenter must be wired explicitly because FluentTheme paints
+             state visuals on it (hover/pressed/disabled). -->
+        <Style Selector="Button.account">
+            <Setter Property="Background" Value="#28FFFFFF" />
+            <Setter Property="BorderBrush" Value="#40FFFFFF" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Height" Value="56" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Padding" Value="16,0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FontSize" Value="14" />
+            <!-- Disable focus halo so buttons don't acquire stray visual emphasis
+                 from initial focus or click. Mouse interaction still works. -->
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="0:0:0.12" />
+                    <BrushTransition Property="BorderBrush" Duration="0:0:0.12" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.account /template/ ContentPresenter">
+            <Setter Property="Background" Value="{TemplateBinding Background}" />
+            <Setter Property="BorderBrush" Value="{TemplateBinding BorderBrush}" />
+            <Setter Property="BorderThickness" Value="{TemplateBinding BorderThickness}" />
+            <Setter Property="CornerRadius" Value="{TemplateBinding CornerRadius}" />
+        </Style>
+
+        <Style Selector="Button.account:pointerover">
+            <Setter Property="Background" Value="#3DFFFFFF" />
+            <Setter Property="BorderBrush" Value="#88FFFFFF" />
+        </Style>
+        <Style Selector="Button.account:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#3DFFFFFF" />
+            <Setter Property="BorderBrush" Value="#88FFFFFF" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+
+        <Style Selector="Button.account:pressed">
+            <Setter Property="Background" Value="#14FFFFFF" />
+            <Setter Property="BorderBrush" Value="#55FFFFFF" />
+        </Style>
+        <Style Selector="Button.account:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="#14FFFFFF" />
+            <Setter Property="BorderBrush" Value="#55FFFFFF" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+
+        <Style Selector="Button.account:disabled">
+            <Setter Property="Opacity" Value="0.45" />
+        </Style>
+        <Style Selector="Button.account:disabled /template/ ContentPresenter">
+            <Setter Property="Background" Value="#28FFFFFF" />
+            <Setter Property="BorderBrush" Value="#40FFFFFF" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+
+    </Application.Styles>
+</Application>

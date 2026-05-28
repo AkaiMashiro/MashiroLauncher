@@ -37,14 +37,14 @@ jobs:
       - name: Run tests
         shell: pwsh
         run: |
-          dotnet test tests/Launcher.Core.Tests/Launcher.Core.Tests.csproj `
+          dotnet test tests/MashiroLauncher.Core.Tests/MashiroLauncher.Core.Tests.csproj `
             -c Release --no-build --nologo `
             --logger "console;verbosity=normal"
 
       - name: Publish single-file Windows exe
         shell: pwsh
         run: |
-          dotnet publish src/Launcher.App/Launcher.App.csproj `
+          dotnet publish src/MashiroLauncher.App/MashiroLauncher.App.csproj `
             -c Release -r win-x64 `
             --self-contained true `
             -p:PublishSingleFile=true `

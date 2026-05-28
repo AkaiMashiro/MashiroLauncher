@@ -1,0 +1,1408 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MashiroLauncher.App.ViewModels"
+        xmlns:controls="using:MashiroLauncher.App.Controls"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="1080" d:DesignHeight="660"
+        x:Class="MashiroLauncher.App.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="Mashiro Launcher"
+        Icon="avares://MashiroLauncher/Assets/AppIcon.png"
+        Width="1080" Height="660"
+        CanResize="False"
+        Background="#181818">
+
+    <Grid>
+        <!-- Background image -->
+        <Image Source="{Binding BackgroundImage}" Stretch="UniformToFill" />
+
+        <!-- Vignette -->
+        <Rectangle IsHitTestVisible="False">
+            <Rectangle.Fill>
+                <RadialGradientBrush Center="50%,50%" GradientOrigin="50%,50%" RadiusX="75%" RadiusY="80%">
+                    <GradientStop Offset="0.35" Color="#00000000" />
+                    <GradientStop Offset="1.0" Color="#B0000000" />
+                </RadialGradientBrush>
+            </Rectangle.Fill>
+        </Rectangle>
+
+        <!-- Top bar -->
+        <Grid VerticalAlignment="Top" Margin="20,16,20,0" ColumnDefinitions="Auto,*,Auto">
+            <Button Grid.Column="0" Classes="icon"
+                    Command="{Binding GoBackCommand}"
+                    IsVisible="{Binding ShowBackButton}"
+                    Content="←" />
+            <Button Grid.Column="2" Classes="icon"
+                    Command="{Binding OpenSettingsCommand}"
+                    Content="⚙" />
+        </Grid>
+
+        <!-- View: Welcome (edition selection) -->
+        <Border IsVisible="{Binding IsWelcomeView}"
+                Classes="welcomeFadeIn"
+                HorizontalAlignment="Center" VerticalAlignment="Center"
+                Width="440"
+                Background="#A8161616" CornerRadius="14"
+                BoxShadow="0 8 32 0 #80000000"
+                Padding="28">
+            <StackPanel Spacing="18">
+                <!-- Title + intro share one StackPanel + TextAlignment Center, so
+                     they read as a single visually-centered header group instead
+                     of three separately-aligned blocks. -->
+                <StackPanel Spacing="4" HorizontalAlignment="Stretch">
+                    <TextBlock Text="Mashiro Launcher" Foreground="White"
+                               FontSize="20" FontWeight="Light"
+                               TextAlignment="Center"
+                               HorizontalAlignment="Stretch" />
+                    <TextBlock Text="환영합니다"
+                               Foreground="#A0FFFFFF"
+                               FontSize="12"
+                               TextAlignment="Center"
+                               HorizontalAlignment="Stretch"
+                               Margin="0,4,0,0" />
+                    <TextBlock Text="먼저 플레이하고 싶은 에디션을 선택해주세요"
+                               Foreground="#A0FFFFFF"
+                               FontSize="12"
+                               TextAlignment="Center"
+                               HorizontalAlignment="Stretch" />
+                </StackPanel>
+
+                <Button Classes="account"
+                        Command="{Binding SelectJavaEditionCommand}"
+                        HorizontalAlignment="Stretch">
+                    <StackPanel Orientation="Horizontal" Spacing="12"
+                                HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Image Source="avares://MashiroLauncher/Assets/JavaIcon.png"
+                               Width="24" Height="24"
+                               Stretch="Uniform"
+                               VerticalAlignment="Center" />
+                        <TextBlock Text="Java Edition"
+                                   FontSize="14" Foreground="White"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+
+                <Button Classes="account"
+                        Command="{Binding SelectBedrockEditionCommand}"
+                        HorizontalAlignment="Stretch">
+                    <StackPanel Orientation="Horizontal" Spacing="12"
+                                HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Image Source="avares://MashiroLauncher/Assets/BedrockIcon.png"
+                               Width="24" Height="24"
+                               Stretch="Uniform"
+                               VerticalAlignment="Center" />
+                        <TextBlock Text="Bedrock Edition"
+                                   FontSize="14" Foreground="White"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </Border>
+
+        <!-- View: Account selection (Java path) -->
+        <Border IsVisible="{Binding IsAccountView}"
+                HorizontalAlignment="Center" VerticalAlignment="Center"
+                Width="440"
+                Background="#A8161616" CornerRadius="14"
+                BoxShadow="0 8 32 0 #80000000"
+                Padding="28">
+            <StackPanel Spacing="16">
+                <TextBlock Text="계정 선택" Foreground="White"
+                           FontSize="16" FontWeight="Light"
+                           HorizontalAlignment="Center" Margin="0,0,0,4" />
+
+                <Button Classes="account"
+                        Command="{Binding LoginMicrosoftCommand}"
+                        IsEnabled="{Binding !IsAuthenticating}"
+                        HorizontalAlignment="Stretch">
+                    <StackPanel Orientation="Horizontal" Spacing="12"
+                                HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Grid Width="18" Height="18"
+                              ColumnDefinitions="*,*" RowDefinitions="*,*"
+                              ColumnSpacing="2" RowSpacing="2">
+                            <Rectangle Grid.Column="0" Grid.Row="0" Fill="#F25022" />
+                            <Rectangle Grid.Column="1" Grid.Row="0" Fill="#7FBA00" />
+                            <Rectangle Grid.Column="0" Grid.Row="1" Fill="#00A4EF" />
+                            <Rectangle Grid.Column="1" Grid.Row="1" Fill="#FFB900" />
+                        </Grid>
+                        <TextBlock Text="{Binding MicrosoftButtonText}"
+                                   VerticalAlignment="Center"
+                                   FontSize="14"
+                                   Foreground="White" />
+                    </StackPanel>
+                </Button>
+
+                <Button Classes="account"
+                        Command="{Binding ChooseOfflineCommand}"
+                        HorizontalAlignment="Stretch">
+                    <StackPanel Orientation="Horizontal" Spacing="12"
+                                HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Image Source="avares://MashiroLauncher/Assets/FoxIcon.png"
+                               Width="18" Height="18"
+                               Stretch="Uniform"
+                               VerticalAlignment="Center" />
+                        <TextBlock Text="오프라인으로 플레이"
+                                   VerticalAlignment="Center"
+                                   FontSize="14"
+                                   Foreground="White" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </Border>
+
+        <!-- View: Java Play -->
+        <Border IsVisible="{Binding IsJavaPlayView}"
+                HorizontalAlignment="Center" VerticalAlignment="Center"
+                Width="440"
+                Background="#A8161616" CornerRadius="14"
+                BoxShadow="0 8 32 0 #80000000"
+                Padding="28">
+            <StackPanel Spacing="14">
+                <TextBlock Text="Java Edition" Foreground="White"
+                           FontSize="18" FontWeight="Light"
+                           HorizontalAlignment="Center" Margin="0,0,0,4" />
+
+                <!-- Offline mode (or no MS account): USERNAME input + validation.
+                     Also shown when user explicitly clicked 오프라인으로 플레이 despite
+                     being signed in — see IsOfflineMode flag in the VM. -->
+                <StackPanel Spacing="4" IsVisible="{Binding ShowUsernameInput}">
+                    <TextBlock Classes="label" Text="USERNAME" />
+                    <controls:UsernameTextBox Name="UsernameBox"
+                             Text="{Binding Username, Mode=TwoWay}"
+                             PlaceholderText="Player"
+                             MaxLength="16"
+                             Classes.invalid="{Binding HasUsernameWarning}">
+                        <controls:UsernameTextBox.KeyBindings>
+                            <KeyBinding Gesture="Enter" Command="{Binding LaunchCommand}" />
+                        </controls:UsernameTextBox.KeyBindings>
+                    </controls:UsernameTextBox>
+                    <TextBlock Classes="hint"
+                               Classes.warning="{Binding HasUsernameWarning}"
+                               Text="{Binding UsernameHint}"
+                               IsVisible="{Binding IsUsernameHintVisible}" />
+                </StackPanel>
+
+                <!-- Signed-in mode: Microsoft account chip -->
+                <StackPanel Spacing="4" IsVisible="{Binding ShowAccountChip}">
+                    <TextBlock Classes="label" Text="MICROSOFT 계정" />
+                    <Border Background="#28FFFFFF" BorderBrush="#40FFFFFF" BorderThickness="1"
+                            CornerRadius="6" Padding="10,8">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <Grid Grid.Column="0" Width="14" Height="14" Margin="0,0,10,0"
+                                  ColumnDefinitions="*,*" RowDefinitions="*,*"
+                                  ColumnSpacing="1.5" RowSpacing="1.5"
+                                  VerticalAlignment="Center">
+                                <Rectangle Grid.Column="0" Grid.Row="0" Fill="#F25022" />
+                                <Rectangle Grid.Column="1" Grid.Row="0" Fill="#7FBA00" />
+                                <Rectangle Grid.Column="0" Grid.Row="1" Fill="#00A4EF" />
+                                <Rectangle Grid.Column="1" Grid.Row="1" Fill="#FFB900" />
+                            </Grid>
+                            <TextBlock Grid.Column="1" Text="{Binding SignedInUsername}"
+                                       VerticalAlignment="Center"
+                                       Foreground="White" FontSize="14" />
+                            <Button Grid.Column="2" Classes="icon"
+                                    Command="{Binding SignOutCommand}"
+                                    ToolTip.Tip="로그아웃"
+                                    Width="24" Height="24" FontSize="12"
+                                    Content="⎋" />
+                        </Grid>
+                    </Border>
+                </StackPanel>
+
+                <!-- Quick mode: VERSION + Fabric toggle (default) -->
+                <StackPanel Spacing="6" IsVisible="{Binding !IsInstanceModeEnabled}">
+                    <TextBlock Classes="label" Text="VERSION" />
+                    <ComboBox ItemsSource="{Binding AvailableVersions}"
+                              SelectedItem="{Binding SelectedVersion, Mode=TwoWay}"
+                              HorizontalAlignment="Stretch" />
+                    <CheckBox Content="Fabric 모드 사용"
+                              IsChecked="{Binding UseFabric, Mode=TwoWay}"
+                              Foreground="#DDFFFFFF"
+                              FontSize="12"
+                              Margin="0,2,0,0" />
+                </StackPanel>
+
+                <!-- Instance mode: pick a named instance directly (toggle in Settings → 일반) -->
+                <StackPanel Spacing="6" IsVisible="{Binding IsInstanceModeEnabled}">
+                    <TextBlock Classes="label" Text="인스턴스" />
+                    <ComboBox ItemsSource="{Binding Instances}"
+                              SelectedItem="{Binding SelectedPlayInstance, Mode=TwoWay}"
+                              HorizontalAlignment="Stretch"
+                              PlaceholderText="인스턴스 선택">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:InstanceItemViewModel">
+                                <TextBlock>
+                                    <Run Text="{Binding Name}" />
+                                    <Run Text=" · " />
+                                    <Run Text="{Binding ModloaderLabel}" />
+                                    <Run Text=" · " />
+                                    <Run Text="{Binding VersionId}" />
+                                </TextBlock>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <TextBlock Classes="hint"
+                               Text="설정 → 인스턴스에서 인스턴스를 먼저 만들어주세요"
+                               IsVisible="{Binding HasNoInstances}" />
+                </StackPanel>
+
+                <Button Classes="play"
+                        Command="{Binding LaunchCommand}"
+                        HorizontalAlignment="Stretch"
+                        Height="42"
+                        Content="{Binding LaunchButtonText}" />
+
+                <!-- Power-user shortcut: jump to the instance manager for named profiles. -->
+                <Button Classes="ghost"
+                        Command="{Binding OpenInstanceManagerCommand}"
+                        HorizontalAlignment="Center"
+                        Padding="8,4"
+                        FontSize="11"
+                        Content="+ 인스턴스 만들기 / 관리" />
+            </StackPanel>
+        </Border>
+
+        <!-- View: Bedrock Play -->
+        <Border IsVisible="{Binding IsBedrockPlayView}"
+                HorizontalAlignment="Center" VerticalAlignment="Center"
+                Width="440"
+                Background="#A8161616" CornerRadius="14"
+                BoxShadow="0 8 32 0 #80000000"
+                Padding="28">
+            <StackPanel Spacing="14">
+                <TextBlock Text="Bedrock Edition" Foreground="White"
+                           FontSize="18" FontWeight="Light"
+                           HorizontalAlignment="Center" Margin="0,0,0,4" />
+
+                <StackPanel Spacing="6">
+                    <TextBlock Classes="label" Text="VERSION" />
+                    <Border Background="#28FFFFFF" BorderBrush="#40FFFFFF" BorderThickness="1"
+                            CornerRadius="6" Padding="10,8">
+                        <TextBlock Text="{Binding BedrockVersionText}"
+                                   Foreground="White" FontSize="14"
+                                   VerticalAlignment="Center" />
+                    </Border>
+                    <TextBlock Classes="hint"
+                               Text="{Binding BedrockSubtitle}"
+                               IsVisible="{Binding BedrockSubtitle, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                </StackPanel>
+
+                <Button Classes="play"
+                        Command="{Binding BedrockActionCommand}"
+                        HorizontalAlignment="Stretch"
+                        Height="42"
+                        Content="{Binding BedrockButtonText}" />
+            </StackPanel>
+        </Border>
+
+        <!-- Floating status toast -->
+        <Border Classes="statusToast"
+                Classes.show="{Binding HasStatusMessage}"
+                HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                Margin="0,0,0,56"
+                MaxWidth="520" MinWidth="220"
+                Background="#BC161616"
+                BorderBrush="#28FFFFFF" BorderThickness="1"
+                CornerRadius="10"
+                BoxShadow="0 6 22 -2 #80000000"
+                Padding="20,14">
+            <StackPanel Spacing="10">
+                <Grid ColumnDefinitions="Auto,*">
+                    <Ellipse Grid.Column="0"
+                             Width="8" Height="8"
+                             Margin="0,6,10,0"
+                             Fill="{Binding StatusToastBrush}"
+                             VerticalAlignment="Top" />
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding StatusMessage}"
+                               Foreground="White" FontSize="13"
+                               TextWrapping="Wrap"
+                               LineHeight="18" />
+                </Grid>
+                <ProgressBar IsVisible="{Binding HasActiveLaunch}"
+                             IsIndeterminate="True"
+                             Height="2" />
+            </StackPanel>
+        </Border>
+
+        <!-- Bottom-left: version label -->
+        <TextBlock Text="v0.1"
+                   Foreground="#80FFFFFF" FontSize="10"
+                   HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                   Margin="20,0,0,12" />
+
+        <!-- Bottom-right: Mojang service status (hidden on the Welcome screen,
+             since the user hasn't picked an edition yet and the chip is noise) -->
+        <StackPanel Orientation="Horizontal" Spacing="8"
+                    HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                    Margin="0,0,20,12"
+                    IsVisible="{Binding !IsWelcomeView}">
+            <Ellipse Width="10" Height="10" Fill="{Binding MojangStatusBrush}" VerticalAlignment="Center" />
+            <TextBlock Text="{Binding MojangStatusText}"
+                       Foreground="#DDFFFFFF" FontSize="12"
+                       VerticalAlignment="Center" />
+        </StackPanel>
+
+        <!-- Settings overlay: Discord-style with sidebar + content -->
+        <Border IsVisible="{Binding IsSettingsOpen}" Background="#E8181818">
+            <!-- RowDefinitions="*" pins the row height to the window's available space.
+                 Without this, Avalonia treats the row as Auto and lets the ScrollViewer's
+                 measured content cap the row height at a short value, which manifests as
+                 the scrollable range collapsing to ~5 cards regardless of how many items
+                 the ItemsControl actually holds. -->
+            <Grid Margin="60,40" ColumnDefinitions="240,*" RowDefinitions="*">
+
+                <!-- Sidebar -->
+                <Border Grid.Column="0"
+                        Background="#1A1A1A"
+                        CornerRadius="10,0,0,10"
+                        Padding="14">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="설정"
+                                   Foreground="White"
+                                   FontSize="18" FontWeight="Light"
+                                   Margin="8,4,0,16" />
+
+                        <Button Classes="settingsCategory"
+                                Classes.selected="{Binding IsCategoryGeneral}"
+                                Command="{Binding SelectSettingsCategoryCommand}"
+                                CommandParameter="General"
+                                Content="일반" />
+                        <Button Classes="settingsCategory"
+                                Classes.selected="{Binding IsCategoryAppearance}"
+                                Command="{Binding SelectSettingsCategoryCommand}"
+                                CommandParameter="Appearance"
+                                Content="외관" />
+                        <Button Classes="settingsCategory"
+                                Classes.selected="{Binding IsCategoryMods}"
+                                Command="{Binding SelectSettingsCategoryCommand}"
+                                CommandParameter="Mods"
+                                Content="모드" />
+                        <Button Classes="settingsCategory"
+                                Classes.selected="{Binding IsCategoryInstances}"
+                                Command="{Binding SelectSettingsCategoryCommand}"
+                                CommandParameter="Instances"
+                                Content="인스턴스" />
+
+                        <Border Height="1" Background="#1AFFFFFF" Margin="10,10" />
+
+                        <Button Classes="settingsCategory"
+                                Classes.selected="{Binding IsCategoryAdvanced}"
+                                Command="{Binding SelectSettingsCategoryCommand}"
+                                CommandParameter="Advanced"
+                                Content="고급" />
+                        <Button Classes="settingsCategory"
+                                Classes.selected="{Binding IsCategoryDeveloper}"
+                                Command="{Binding SelectSettingsCategoryCommand}"
+                                CommandParameter="Developer"
+                                Content="개발자" />
+
+                        <Border Height="1" Background="#1AFFFFFF" Margin="10,10" />
+
+                        <Button Classes="settingsCategory"
+                                Classes.selected="{Binding IsCategoryUpdates}"
+                                Command="{Binding SelectSettingsCategoryCommand}"
+                                CommandParameter="Updates"
+                                Content="업데이트" />
+                        <Button Classes="settingsCategory"
+                                Classes.selected="{Binding IsCategoryAbout}"
+                                Command="{Binding SelectSettingsCategoryCommand}"
+                                CommandParameter="About"
+                                Content="정보" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Content area -->
+                <Border Grid.Column="1"
+                        Background="#222222"
+                        CornerRadius="0,10,10,0">
+                    <Grid>
+                        <!-- Padding lives on the inner StackPanel (as Margin), NOT on the
+                             ScrollViewer — ScrollViewer.Padding has a known measure quirk
+                             in Avalonia 12 where deeply-nested ItemsControl children only
+                             contribute partial height to ExtentSize.Y, collapsing the
+                             scrollable range to ~1 viewport. Margin on the content is the
+                             safe shape. -->
+                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <!-- StackPanel (not Grid) so only the currently-visible category
+                                 contributes to the measured height. Avalonia's Grid was
+                                 falling into a measure path where Collapsed siblings still
+                                 influenced ExtentSize, capping the scrollable range. -->
+                            <StackPanel Margin="28,30,28,30">
+                                <!-- General -->
+                                <StackPanel IsVisible="{Binding IsCategoryGeneral}" Spacing="20">
+                                    <TextBlock Text="일반" Classes="sectionTitle" />
+
+                                    <StackPanel Spacing="6">
+                                        <TextBlock Classes="label" Text="플레이 화면" />
+                                        <CheckBox IsChecked="{Binding IsInstanceModeEnabled, Mode=TwoWay}"
+                                                  Content="인스턴스 모드 사용"
+                                                  Foreground="#DDFFFFFF" />
+                                        <TextBlock Classes="hint"
+                                                   Text="끄면 VERSION + Fabric 토글의 빠른 모드. 켜면 미리 만들어둔 인스턴스를 직접 선택해 플레이합니다."
+                                                   TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <!-- Appearance -->
+                                <StackPanel IsVisible="{Binding IsCategoryAppearance}" Spacing="20">
+                                    <TextBlock Text="외관" Classes="sectionTitle" />
+                                    <StackPanel Spacing="6">
+                                        <TextBlock Classes="label" Text="배경 이미지" />
+                                        <Button Classes="ghost aligned" HorizontalAlignment="Left"
+                                                Command="{Binding ChangeBackgroundCommand}"
+                                                Content="이미지 선택..." />
+                                        <TextBlock Text="JPG / PNG / WEBP 지원"
+                                                   Foreground="#80FFFFFF" FontSize="10" />
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <!-- Mods (Modrinth) — MaxWidth caps the whole panel at a sensible
+                                     reading width regardless of window size so combo / cards /
+                                     search box all share the same width and don't sprawl. -->
+                                <StackPanel IsVisible="{Binding IsCategoryMods}" Spacing="20"
+                                            MaxWidth="640" HorizontalAlignment="Left">
+                                    <TextBlock Text="모드" Classes="sectionTitle" />
+
+                                    <!-- Instance picker — anything that can load mods (Fabric or NeoForge). -->
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Classes="label" Text="인스턴스" />
+                                        <ComboBox ItemsSource="{Binding ModdableInstances}"
+                                                  SelectedItem="{Binding SelectedModInstance, Mode=TwoWay}"
+                                                  HorizontalAlignment="Stretch"
+                                                  PlaceholderText="모드 인스턴스 선택">
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:InstanceItemViewModel">
+                                                    <TextBlock>
+                                                        <Run Text="{Binding Name}" />
+                                                        <Run Text=" · " />
+                                                        <Run Text="{Binding VersionId}" />
+                                                    </TextBlock>
+                                                </DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
+                                        <TextBlock Classes="hint"
+                                                   Text="모드는 Fabric 또는 NeoForge 인스턴스에 설치할 수 있어요. 설정 → 인스턴스에서 먼저 만들어주세요."
+                                                   TextWrapping="Wrap"
+                                                   IsVisible="{Binding HasNoModdableInstance}" />
+                                    </StackPanel>
+
+                                    <!-- Search + installed list (only when an instance is selected) -->
+                                    <StackPanel Spacing="16" IsVisible="{Binding HasSelectedModInstance}">
+
+                                        <!-- 1. Search input (live; no explicit button) + sort picker on the right. -->
+                                        <StackPanel Spacing="6">
+                                            <TextBlock Classes="label" Text="모드 검색 (Modrinth)" />
+                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                <TextBox Grid.Column="0"
+                                                         Text="{Binding ModSearchQuery, Mode=TwoWay}"
+                                                         PlaceholderText="예: sodium, fabric-api (입력하면 자동 검색)"
+                                                         HorizontalAlignment="Stretch">
+                                                    <TextBox.KeyBindings>
+                                                        <KeyBinding Gesture="Enter"
+                                                                    Command="{Binding SearchModsCommand}" />
+                                                    </TextBox.KeyBindings>
+                                                </TextBox>
+                                                <ComboBox Grid.Column="1"
+                                                          MinWidth="120"
+                                                          ItemsSource="{Binding ModSortOptions}"
+                                                          SelectedItem="{Binding SelectedModSort}">
+                                                    <ComboBox.ItemTemplate>
+                                                        <DataTemplate x:DataType="vm:MainWindowViewModel+ModSortOption">
+                                                            <TextBlock Text="{Binding Label}" />
+                                                        </DataTemplate>
+                                                    </ComboBox.ItemTemplate>
+                                                </ComboBox>
+                                            </Grid>
+                                            <TextBlock Classes="hint"
+                                                       Text="{Binding ModStatusText}"
+                                                       IsVisible="{Binding ModStatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                        </StackPanel>
+
+                                        <!-- 2. Installed mods (between search and results, per user request).
+                                             Action chip row above the header: import external jar + check for
+                                             updates + (conditionally) "update all". Ghost chips visually separate
+                                             these actions from the plain hint text above. -->
+                                        <StackPanel Spacing="8">
+                                            <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Left">
+                                                <Button Classes="ghost"
+                                                        FontSize="11"
+                                                        Command="{Binding ImportExternalModsCommand}"
+                                                        Content="+ 외부 jar 가져오기"
+                                                        ToolTip.Tip="Modrinth에 없는 .jar 모드를 인스턴스 mods 폴더로 복사합니다" />
+                                                <!-- Ghost button stays a fixed shape (no inline ✓ to pad it).
+                                                     The spinner sits inline only during the check, but the
+                                                     "done" ✓ lives OUTSIDE the button so success feedback
+                                                     never changes button width. -->
+                                                <Button Classes="ghost"
+                                                        FontSize="11"
+                                                        Command="{Binding CheckModUpdatesCommand}"
+                                                        IsEnabled="{Binding !IsCheckingUpdates}"
+                                                        IsVisible="{Binding ShowCheckUpdatesButton}"
+                                                        ToolTip.Tip="설치된 Modrinth 모드의 새 버전을 확인합니다">
+                                                    <StackPanel Orientation="Horizontal" Spacing="6"
+                                                                VerticalAlignment="Center">
+                                                        <Ellipse Classes="circleSpinner"
+                                                                 IsVisible="{Binding IsCheckingUpdates}"
+                                                                 VerticalAlignment="Center" />
+                                                        <TextBlock Text="업데이트 확인"
+                                                                   VerticalAlignment="Center" />
+                                                    </StackPanel>
+                                                </Button>
+
+                                                <!-- Green ✓ shown immediately to the right of the button
+                                                     for 3 seconds when the check found no updates. Lives
+                                                     OUTSIDE the button so it can't push the button wider. -->
+                                                <TextBlock Text="✓"
+                                                           IsVisible="{Binding ShowAllModsUpToDate}"
+                                                           Foreground="#5BC54E"
+                                                           FontSize="14" FontWeight="Bold"
+                                                           VerticalAlignment="Center" />
+
+                                                <!-- Separate chip when updates are available — clicking runs UpdateAll. -->
+                                                <Button Classes="ghost"
+                                                        FontSize="11"
+                                                        IsVisible="{Binding HasModUpdates}"
+                                                        Command="{Binding UpdateAllModsCommand}"
+                                                        Content="{Binding UpdatesAvailableLabel}"
+                                                        Foreground="#5BC54E"
+                                                        ToolTip.Tip="업데이트 가능한 모드를 모두 최신 버전으로 교체합니다" />
+                                            </StackPanel>
+
+                                            <Button Background="Transparent" BorderThickness="0" Padding="0"
+                                                    Cursor="Hand"
+                                                    HorizontalAlignment="Stretch"
+                                                    HorizontalContentAlignment="Left"
+                                                    Command="{Binding ToggleInstalledModsCommand}">
+                                                <Grid ColumnDefinitions="*,Auto">
+                                                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
+                                                        <TextBlock Classes="label" Text="설치된 모드" />
+                                                        <TextBlock Text="{Binding InstalledModsCountLabel}"
+                                                                   Foreground="#80FFFFFF" FontSize="11"
+                                                                   VerticalAlignment="Center" />
+                                                    </StackPanel>
+                                                    <TextBlock Grid.Column="1" Text="▶"
+                                                               Foreground="#80FFFFFF" FontSize="10"
+                                                               VerticalAlignment="Center"
+                                                               IsVisible="{Binding !IsInstalledModsExpanded}" />
+                                                    <TextBlock Grid.Column="1" Text="▼"
+                                                               Foreground="#80FFFFFF" FontSize="10"
+                                                               VerticalAlignment="Center"
+                                                               IsVisible="{Binding IsInstalledModsExpanded}" />
+                                                </Grid>
+                                            </Button>
+
+                                            <Border Classes="comingSoon"
+                                                    IsVisible="{Binding ShowEmptyInstalledHint}">
+                                                <TextBlock Text="이 인스턴스에 설치된 모드가 없습니다."
+                                                           Foreground="#A0FFFFFF" FontSize="12" />
+                                            </Border>
+                                            <ItemsControl ItemsSource="{Binding InstalledMods}"
+                                                          IsVisible="{Binding IsInstalledModsExpanded}"
+                                                          HorizontalAlignment="Stretch">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <StackPanel Spacing="6" />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="vm:InstalledModViewModel">
+                                                        <!-- modCard.dim mutes the whole row visually when the mod is
+                                                             disabled, paired with the inline toggle below. Same dim
+                                                             style as the search-result "사용 불가" treatment. -->
+                                                        <Border Background="#1F1F1F"
+                                                                Classes="modCard"
+                                                                Classes.dim="{Binding !IsEnabled}"
+                                                                BorderBrush="#28FFFFFF" BorderThickness="1"
+                                                                CornerRadius="8" Padding="12"
+                                                                HorizontalAlignment="Stretch">
+                                                            <Grid ColumnDefinitions="48,*,Auto,Auto" ColumnSpacing="10">
+                                                                <Border Grid.Column="0"
+                                                                        Width="48" Height="48"
+                                                                        Background="#2F2F2F" CornerRadius="6"
+                                                                        ClipToBounds="True">
+                                                                    <Panel>
+                                                                        <Image Source="{Binding Icon}"
+                                                                               Stretch="UniformToFill"
+                                                                               IsVisible="{Binding HasIcon}" />
+                                                                        <TextBlock Text="?"
+                                                                                   FontSize="26" FontWeight="SemiBold"
+                                                                                   Foreground="#80FFFFFF"
+                                                                                   HorizontalAlignment="Center"
+                                                                                   VerticalAlignment="Center"
+                                                                                   IsVisible="{Binding !HasIcon}" />
+                                                                    </Panel>
+                                                                </Border>
+                                                                <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
+                                                                    <TextBlock Text="{Binding Title}"
+                                                                               Foreground="White" FontSize="13"
+                                                                               FontWeight="SemiBold"
+                                                                               TextTrimming="CharacterEllipsis" />
+                                                                    <TextBlock Text="{Binding Filename}"
+                                                                               Foreground="#70FFFFFF" FontSize="10"
+                                                                               FontFamily="Cascadia Code,Consolas,Courier New,monospace"
+                                                                               TextTrimming="CharacterEllipsis" />
+                                                                    <!-- Update info row: only visible when CheckModUpdates found a newer
+                                                                         compatible version. Inline ghost-chip "업데이트" button + spinner
+                                                                         while the per-mod update is in flight. -->
+                                                                    <StackPanel Orientation="Horizontal" Spacing="6"
+                                                                                IsVisible="{Binding HasUpdate}">
+                                                                        <TextBlock Text="{Binding UpdateLabel}"
+                                                                                   Foreground="#5BC54E" FontSize="10"
+                                                                                   VerticalAlignment="Center" />
+                                                                        <Button Classes="ghost"
+                                                                                FontSize="10" Padding="6,2"
+                                                                                Command="{Binding UpdateCommand}"
+                                                                                Content="업데이트"
+                                                                                VerticalAlignment="Center" />
+                                                                    </StackPanel>
+                                                                    <StackPanel Orientation="Horizontal" Spacing="6"
+                                                                                IsVisible="{Binding IsUpdating}">
+                                                                        <TextBlock Text="업데이트 중..."
+                                                                                   Foreground="#5BC54E" FontSize="10"
+                                                                                   VerticalAlignment="Center" />
+                                                                        <ProgressBar Classes="spinner"
+                                                                                     VerticalAlignment="Center" />
+                                                                    </StackPanel>
+                                                                </StackPanel>
+                                                                <CheckBox Grid.Column="2"
+                                                                          IsChecked="{Binding IsEnabled, Mode=TwoWay}"
+                                                                          VerticalAlignment="Center"
+                                                                          ToolTip.Tip="모드 사용 여부 (꺼두면 .jar.disabled로 보관)" />
+                                                                <Button Grid.Column="3" Classes="ghost"
+                                                                        VerticalAlignment="Center"
+                                                                        Command="{Binding UninstallCommand}"
+                                                                        Content="제거" />
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+
+                                        <!-- 3. Search results — cards stretch to fill the available width. -->
+                                        <StackPanel Spacing="6">
+                                            <TextBlock Classes="label" Text="검색 결과" />
+                                            <ItemsControl ItemsSource="{Binding ModSearchResults}"
+                                                          HorizontalAlignment="Stretch">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <StackPanel Spacing="6" />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="vm:ModItemViewModel">
+                                                        <Border Background="#1F1F1F"
+                                                                Classes="modCard"
+                                                                Classes.dim="{Binding !IsCompatible}"
+                                                                BorderBrush="#28FFFFFF" BorderThickness="1"
+                                                                CornerRadius="8" Padding="12"
+                                                                HorizontalAlignment="Stretch">
+                                                            <Grid ColumnDefinitions="48,*,Auto" ColumnSpacing="12">
+                                                                <Border Grid.Column="0"
+                                                                        Width="48" Height="48"
+                                                                        Background="#2F2F2F" CornerRadius="6"
+                                                                        ClipToBounds="True">
+                                                                    <Image Source="{Binding Icon}"
+                                                                           Stretch="UniformToFill" />
+                                                                </Border>
+                                                                <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
+                                                                    <TextBlock Text="{Binding Title}"
+                                                                               Foreground="White" FontSize="13"
+                                                                               FontWeight="SemiBold"
+                                                                               TextTrimming="CharacterEllipsis" />
+                                                                    <TextBlock Text="{Binding Description}"
+                                                                               Foreground="#A0FFFFFF" FontSize="11"
+                                                                               TextWrapping="Wrap"
+                                                                               MaxLines="2"
+                                                                               TextTrimming="CharacterEllipsis" />
+                                                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                                                        <TextBlock Foreground="#70FFFFFF" FontSize="10"
+                                                                                   VerticalAlignment="Center">
+                                                                            <Run Text="{Binding DownloadsLabel}" />
+                                                                            <Run Text=" · " />
+                                                                            <Run Text="{Binding Author}" />
+                                                                        </TextBlock>
+                                                                        <!-- Link-style detail trigger; opens the full-description overlay. -->
+                                                                        <Button Classes="link"
+                                                                                Command="{Binding ShowDetailsCommand}"
+                                                                                Content="자세히 ▸" />
+                                                                    </StackPanel>
+                                                                </StackPanel>
+                                                                <!-- Four mutually exclusive action-area states:
+                                                                       1) CanInstall        → "설치" button (compatible, not installed)
+                                                                       2) IsInstalling      → spinner + "설치 중..." (disabled)
+                                                                       3) IsInstalled       → "설치됨" chip (disabled, muted)
+                                                                       4) ShowIncompatible  → "사용 불가" chip (red-muted) -->
+                                                                <Panel Grid.Column="2" VerticalAlignment="Center" MinWidth="92">
+                                                                    <Button Classes="ghost"
+                                                                            HorizontalAlignment="Right"
+                                                                            IsVisible="{Binding CanInstall}"
+                                                                            Command="{Binding InstallCommand}"
+                                                                            Content="설치" />
+                                                                    <Border IsVisible="{Binding IsInstalling}"
+                                                                            HorizontalAlignment="Right"
+                                                                            Background="#1F1F1F"
+                                                                            BorderBrush="#5BC54E" BorderThickness="1"
+                                                                            CornerRadius="6"
+                                                                            Padding="8,4">
+                                                                        <StackPanel Orientation="Horizontal" Spacing="8"
+                                                                                    VerticalAlignment="Center">
+                                                                            <TextBlock Text="설치 중..."
+                                                                                       Foreground="#5BC54E" FontSize="12"
+                                                                                       VerticalAlignment="Center" />
+                                                                            <ProgressBar Classes="spinner"
+                                                                                         VerticalAlignment="Center" />
+                                                                        </StackPanel>
+                                                                    </Border>
+                                                                    <Border IsVisible="{Binding IsInstalled}"
+                                                                            HorizontalAlignment="Right"
+                                                                            Background="#2A2A2A"
+                                                                            BorderBrush="#3A3A3A" BorderThickness="1"
+                                                                            CornerRadius="6"
+                                                                            Padding="10,4">
+                                                                        <TextBlock Text="설치됨"
+                                                                                   Foreground="#90FFFFFF" FontSize="12"
+                                                                                   VerticalAlignment="Center" />
+                                                                    </Border>
+                                                                    <Border IsVisible="{Binding ShowIncompatible}"
+                                                                            HorizontalAlignment="Right"
+                                                                            Background="#2A1F1F"
+                                                                            BorderBrush="#5A3A3A" BorderThickness="1"
+                                                                            CornerRadius="6"
+                                                                            Padding="10,4"
+                                                                            ToolTip.Tip="이 인스턴스의 모드로더에서 지원되지 않는 모드입니다">
+                                                                        <TextBlock Text="사용 불가"
+                                                                                   Foreground="#FFB0B0" FontSize="12"
+                                                                                   VerticalAlignment="Center" />
+                                                                    </Border>
+                                                                </Panel>
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+
+                                            <!-- "더 보기" only shows when the server has more pages we haven't pulled
+                                                 yet. While the next page is in flight we swap in a muted spinner row
+                                                 so the user knows something is happening without the layout jumping. -->
+                                            <Button Classes="ghost"
+                                                    HorizontalAlignment="Center"
+                                                    IsVisible="{Binding CanLoadMoreMods}"
+                                                    Command="{Binding LoadMoreModsCommand}"
+                                                    Content="더 보기"
+                                                    Margin="0,4,0,0" />
+                                            <StackPanel Orientation="Horizontal"
+                                                        Spacing="8"
+                                                        HorizontalAlignment="Center"
+                                                        Margin="0,4,0,0"
+                                                        IsVisible="{Binding IsLoadingMoreMods}">
+                                                <TextBlock Text="더 불러오는 중..."
+                                                           Foreground="#A0FFFFFF" FontSize="12"
+                                                           VerticalAlignment="Center" />
+                                                <ProgressBar Classes="spinner"
+                                                             VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </StackPanel>
+
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <!-- Instances: manager with cards + inline create form -->
+                                <StackPanel IsVisible="{Binding IsCategoryInstances}" Spacing="20">
+                                    <!-- Grid bottom margin matches the default sectionTitle margin
+                                         used by every other category, so the header → content gap
+                                         is identical across the settings panel. -->
+                                    <Grid ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,0,0,14">
+                                        <TextBlock Grid.Column="0" Text="인스턴스"
+                                                   Classes="sectionTitle" Margin="0" />
+                                        <!-- 3 action chips share the header row: import a backup .zip,
+                                             import a Modrinth .mrpack, or create from scratch. All hidden
+                                             while the inline create form is open. -->
+                                        <Button Grid.Column="1" Classes="ghost"
+                                                Command="{Binding ImportInstanceCommand}"
+                                                IsVisible="{Binding !IsCreatingInstance}"
+                                                Content="+ 백업 가져오기"
+                                                VerticalAlignment="Center"
+                                                Margin="0,0,6,0"
+                                                ToolTip.Tip="이전에 '내보내기'로 만든 .zip 백업을 새 인스턴스로 복원" />
+                                        <Button Grid.Column="2" Classes="ghost"
+                                                Command="{Binding ImportMrpackCommand}"
+                                                IsVisible="{Binding !IsCreatingInstance}"
+                                                Content="+ 모드팩 가져오기"
+                                                VerticalAlignment="Center"
+                                                Margin="0,0,6,0"
+                                                ToolTip.Tip="Modrinth 모드팩(.mrpack)을 새 인스턴스로 임포트합니다" />
+                                        <!-- Right margin reserves space for the floating ✕ close button
+                                             (overlay icon: Margin 0,14,14,0 + 36 wide) so they don't overlap. -->
+                                        <Button Grid.Column="3" Classes="ghost"
+                                                Command="{Binding BeginCreateInstanceCommand}"
+                                                IsVisible="{Binding !IsCreatingInstance}"
+                                                Content="+ 새 인스턴스"
+                                                VerticalAlignment="Center"
+                                                Margin="0,0,36,0" />
+                                    </Grid>
+
+                                    <!-- Inline create form -->
+                                    <Border IsVisible="{Binding IsCreatingInstance}"
+                                            Background="#1F1F1F" CornerRadius="8" Padding="16"
+                                            BorderBrush="#33FFFFFF" BorderThickness="1">
+                                        <StackPanel Spacing="12">
+                                            <TextBlock Text="새 인스턴스" Foreground="White"
+                                                       FontSize="14" FontWeight="SemiBold" />
+                                            <StackPanel Spacing="4">
+                                                <TextBlock Classes="label" Text="이름" />
+                                                <TextBox Text="{Binding NewInstanceName, Mode=TwoWay}"
+                                                         PlaceholderText="예: 모드 통합팩"
+                                                         MaxLength="24"
+                                                         Width="320"
+                                                         HorizontalAlignment="Left">
+                                                    <TextBox.KeyBindings>
+                                                        <KeyBinding Gesture="Enter"
+                                                                    Command="{Binding CreateInstanceCommand}" />
+                                                    </TextBox.KeyBindings>
+                                                </TextBox>
+                                                <TextBlock Classes="hint" Text="최대 24자" />
+                                            </StackPanel>
+                                            <StackPanel Spacing="4">
+                                                <TextBlock Classes="label" Text="버전" />
+                                                <ComboBox ItemsSource="{Binding AvailableVersions}"
+                                                          SelectedItem="{Binding NewInstanceVersion, Mode=TwoWay}"
+                                                          Width="320"
+                                                          HorizontalAlignment="Left" />
+                                            </StackPanel>
+                                            <StackPanel Spacing="4">
+                                                <TextBlock Classes="label" Text="모드로더" />
+                                                <ComboBox ItemsSource="{Binding ModloaderOptions}"
+                                                          SelectedItem="{Binding NewInstanceModloaderName, Mode=TwoWay}"
+                                                          Width="320"
+                                                          HorizontalAlignment="Left" />
+                                            </StackPanel>
+                                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                                                <Button Classes="ghost"
+                                                        Command="{Binding CancelCreateInstanceCommand}"
+                                                        Content="취소" />
+                                                <Button Classes="play" Width="100" Height="36"
+                                                        Command="{Binding CreateInstanceCommand}"
+                                                        Content="만들기" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Empty state -->
+                                    <Border Classes="comingSoon" IsVisible="{Binding HasNoInstances}">
+                                        <StackPanel Spacing="6">
+                                            <TextBlock Text="아직 인스턴스가 없음"
+                                                       FontSize="14" Foreground="#C0FFFFFF" />
+                                            <TextBlock Text="우측 상단 '+ 새 인스턴스' 버튼을 눌러 첫 인스턴스를 만들어주세요."
+                                                       Foreground="#A0FFFFFF" TextWrapping="Wrap" FontSize="12" />
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Instance cards -->
+                                    <ItemsControl ItemsSource="{Binding Instances}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Spacing="10" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:InstanceItemViewModel">
+                                                <Border Background="#1F1F1F" CornerRadius="8" Padding="14"
+                                                        BorderBrush="#28FFFFFF" BorderThickness="1">
+                                                    <Panel>
+                                                        <!-- Default: info + action icons -->
+                                                        <Grid IsVisible="{Binding IsDefaultMode}"
+                                                              ColumnDefinitions="*,Auto">
+                                                            <StackPanel Grid.Column="0" Spacing="3"
+                                                                        VerticalAlignment="Center">
+                                                                <TextBlock Text="{Binding Name}"
+                                                                           Foreground="White" FontSize="14"
+                                                                           FontWeight="SemiBold" />
+                                                                <TextBlock Foreground="#A0FFFFFF" FontSize="11">
+                                                                    <Run Text="{Binding ModloaderLabel}" />
+                                                                    <Run Text=" · " />
+                                                                    <Run Text="{Binding VersionId}" />
+                                                                </TextBlock>
+                                                                <TextBlock Text="{Binding LastPlayedLabel}"
+                                                                           Foreground="#70FFFFFF" FontSize="10" />
+                                                                <!-- Per-instance JVM overrides shown subtly so the user knows
+                                                                     why this instance might launch with different memory. -->
+                                                                <TextBlock Text="{Binding JvmHint}"
+                                                                           Foreground="#5BC54E" FontSize="10"
+                                                                           IsVisible="{Binding HasJvmOverrides}" />
+                                                            </StackPanel>
+                                                            <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                                                        Spacing="6" VerticalAlignment="Center">
+                                                                <Button Classes="play"
+                                                                        Width="80" Height="32"
+                                                                        Padding="0" FontSize="12"
+                                                                        Command="{Binding PlayCommand}"
+                                                                        Content="▶ 플레이" />
+                                                                <Button Classes="ghost"
+                                                                        Command="{Binding OpenFolderCommand}"
+                                                                        Content="폴더 열기" />
+                                                                <Button Classes="ghost"
+                                                                        Command="{Binding BeginRenameCommand}"
+                                                                        Content="이름 변경" />
+                                                                <Button Classes="ghost"
+                                                                        Command="{Binding BeginConfigureJvmCommand}"
+                                                                        Content="고급"
+                                                                        ToolTip.Tip="인스턴스별 메모리 / JVM args 설정" />
+                                                                <Button Classes="ghost"
+                                                                        Command="{Binding DuplicateCommand}"
+                                                                        Content="복제" />
+                                                                <Button Classes="ghost"
+                                                                        Command="{Binding ExportCommand}"
+                                                                        Content="내보내기"
+                                                                        ToolTip.Tip="인스턴스 전체를 .zip으로 백업" />
+                                                                <Button Classes="ghost"
+                                                                        Command="{Binding BeginDeleteCommand}"
+                                                                        Content="삭제" />
+                                                            </StackPanel>
+                                                        </Grid>
+
+                                                        <!-- Rename -->
+                                                        <StackPanel IsVisible="{Binding IsRenaming}" Spacing="8">
+                                                            <TextBlock Classes="label" Text="이름 변경" />
+                                                            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
+                                                                <TextBox Grid.Column="0"
+                                                                         Text="{Binding RenameInput, Mode=TwoWay}"
+                                                                         MaxLength="40">
+                                                                    <TextBox.KeyBindings>
+                                                                        <KeyBinding Gesture="Enter"
+                                                                                    Command="{Binding ConfirmRenameCommand}" />
+                                                                        <KeyBinding Gesture="Escape"
+                                                                                    Command="{Binding CancelRenameCommand}" />
+                                                                    </TextBox.KeyBindings>
+                                                                </TextBox>
+                                                                <Button Grid.Column="1" Classes="ghost"
+                                                                        Command="{Binding CancelRenameCommand}" Content="취소" />
+                                                                <Button Grid.Column="2" Classes="ghost"
+                                                                        Command="{Binding ConfirmRenameCommand}" Content="확인" />
+                                                            </Grid>
+                                                        </StackPanel>
+
+                                                        <!-- Delete confirm -->
+                                                        <StackPanel IsVisible="{Binding IsConfirmingDelete}" Spacing="8">
+                                                            <TextBlock Text="정말 삭제할까요?"
+                                                                       Foreground="White" FontSize="13"
+                                                                       FontWeight="SemiBold" />
+                                                            <TextBlock Text="이 인스턴스의 게임 데이터(저장된 월드, 모드, 옵션 등)가 모두 삭제됩니다. 되돌릴 수 없습니다."
+                                                                       Foreground="#A0FFFFFF" FontSize="11"
+                                                                       TextWrapping="Wrap" />
+                                                            <StackPanel Orientation="Horizontal" Spacing="8"
+                                                                        HorizontalAlignment="Right">
+                                                                <Button Classes="ghost"
+                                                                        Command="{Binding CancelDeleteCommand}" Content="취소" />
+                                                                <Button Classes="ghost"
+                                                                        Command="{Binding ConfirmDeleteCommand}"
+                                                                        Content="삭제" Foreground="#EF5350" />
+                                                            </StackPanel>
+                                                        </StackPanel>
+
+                                                        <!-- JVM override sub-form. Empty inputs = inherit global. -->
+                                                        <StackPanel IsVisible="{Binding IsConfiguringJvm}" Spacing="10">
+                                                            <TextBlock Text="고급 설정"
+                                                                       Foreground="White" FontSize="13"
+                                                                       FontWeight="SemiBold" />
+                                                            <TextBlock Text="비워두면 Settings → 고급의 전역 값을 사용합니다."
+                                                                       Foreground="#A0FFFFFF" FontSize="11"
+                                                                       TextWrapping="Wrap" />
+                                                            <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                                                                <StackPanel Grid.Column="0" Spacing="4">
+                                                                    <TextBlock Classes="label" Text="최소 메모리 (MB)" />
+                                                                    <TextBox Text="{Binding MinMemoryInput, Mode=TwoWay}"
+                                                                             PlaceholderText="예: 1024" />
+                                                                </StackPanel>
+                                                                <StackPanel Grid.Column="1" Spacing="4">
+                                                                    <TextBlock Classes="label" Text="최대 메모리 (MB)" />
+                                                                    <TextBox Text="{Binding MaxMemoryInput, Mode=TwoWay}"
+                                                                             PlaceholderText="예: 8192" />
+                                                                </StackPanel>
+                                                            </Grid>
+                                                            <StackPanel Spacing="4">
+                                                                <TextBlock Classes="label" Text="추가 JVM 인자" />
+                                                                <TextBox Text="{Binding CustomJvmArgsInput, Mode=TwoWay}"
+                                                                         AcceptsReturn="False"
+                                                                         PlaceholderText="공백으로 구분" />
+                                                            </StackPanel>
+                                                            <StackPanel Orientation="Horizontal" Spacing="8"
+                                                                        HorizontalAlignment="Right">
+                                                                <Button Classes="ghost"
+                                                                        Command="{Binding CancelJvmConfigCommand}" Content="취소" />
+                                                                <Button Classes="ghost"
+                                                                        Command="{Binding SaveJvmConfigCommand}" Content="저장" />
+                                                            </StackPanel>
+                                                        </StackPanel>
+                                                    </Panel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+
+                                <!-- Advanced: Memory + JVM -->
+                                <StackPanel IsVisible="{Binding IsCategoryAdvanced}" Spacing="20">
+                                    <TextBlock Text="고급" Classes="sectionTitle" />
+
+                                    <StackPanel Spacing="6">
+                                        <TextBlock Classes="label" Text="최소 메모리 (MB)" />
+                                        <NumericUpDown Value="{Binding MinMemoryMbValue, Mode=TwoWay}"
+                                                       Minimum="256" Maximum="32768" Increment="256"
+                                                       FormatString="0"
+                                                       Width="200" HorizontalAlignment="Left" />
+                                    </StackPanel>
+
+                                    <StackPanel Spacing="6">
+                                        <TextBlock Classes="label" Text="최대 메모리 (MB)" />
+                                        <NumericUpDown Value="{Binding MaxMemoryMbValue, Mode=TwoWay}"
+                                                       Minimum="512" Maximum="32768" Increment="256"
+                                                       FormatString="0"
+                                                       Width="200" HorizontalAlignment="Left" />
+                                        <TextBlock Text="JVM 기본값을 덮어씁니다. 16GB 시스템 기준 4096~8192MB 권장."
+                                                   Foreground="#80FFFFFF" FontSize="10" />
+                                    </StackPanel>
+
+                                    <StackPanel Spacing="6">
+                                        <TextBlock Classes="label" Text="추가 JVM 인자" />
+                                        <TextBox Text="{Binding CustomJvmArgs, Mode=TwoWay}"
+                                                 AcceptsReturn="False" />
+                                        <TextBlock Text="공백으로 구분. 메모리 인자 다음, 버전 JVM 인자 전에 삽입됨."
+                                                   Foreground="#80FFFFFF" FontSize="10" />
+                                    </StackPanel>
+
+                                    <Button Classes="ghost aligned" HorizontalAlignment="Left"
+                                            Command="{Binding SaveAdvancedSettingsCommand}"
+                                            Content="저장" />
+                                </StackPanel>
+
+                                <!-- Developer: log viewer + folder open -->
+                                <StackPanel IsVisible="{Binding IsCategoryDeveloper}" Spacing="20">
+                                    <TextBlock Text="개발자" Classes="sectionTitle" />
+
+                                    <StackPanel Spacing="6">
+                                        <TextBlock Classes="label" Text="로그" />
+                                        <!-- Picker + actions. ItemTemplate shows the friendly DisplayLabel
+                                             ("런처 · mods.log" / "인스턴스 · Better-MC · latest.log") instead
+                                             of the raw absolute file path. -->
+                                        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
+                                            <ComboBox Grid.Column="0"
+                                                      ItemsSource="{Binding AvailableLogFiles}"
+                                                      SelectedItem="{Binding SelectedLogFile, Mode=TwoWay}"
+                                                      PlaceholderText="로그 파일 선택">
+                                                <ComboBox.ItemTemplate>
+                                                    <DataTemplate x:DataType="vm:MainWindowViewModel+LogFileEntry">
+                                                        <TextBlock Text="{Binding DisplayLabel}" />
+                                                    </DataTemplate>
+                                                </ComboBox.ItemTemplate>
+                                            </ComboBox>
+                                            <Button Grid.Column="1" Classes="ghost"
+                                                    Command="{Binding RefreshLogListCommand}"
+                                                    Content="새로고침" />
+                                            <Button Grid.Column="2" Classes="ghost"
+                                                    Command="{Binding OpenLogsFolderCommand}"
+                                                    Content="폴더 열기" />
+                                        </Grid>
+                                        <!-- Tail viewer. Fixed height keeps the settings panel layout
+                                             predictable; ScrollViewer makes the long tail navigable. -->
+                                        <Border Background="#161616"
+                                                BorderBrush="#28FFFFFF" BorderThickness="1"
+                                                CornerRadius="6"
+                                                Padding="2"
+                                                Height="340">
+                                            <!-- Wrap=Wrap + Disabled horizontal scroll so log4j XML lines
+                                                 (which can be 600+ chars wide) fold into the viewer width
+                                                 instead of forcing a horizontal scroll. -->
+                                            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                                          HorizontalScrollBarVisibility="Disabled">
+                                                <TextBox Text="{Binding LogContent, Mode=OneWay}"
+                                                         IsReadOnly="True"
+                                                         AcceptsReturn="True"
+                                                         TextWrapping="Wrap"
+                                                         Background="Transparent"
+                                                         BorderThickness="0"
+                                                         FontFamily="Cascadia Code,Consolas,Courier New,monospace"
+                                                         FontSize="11" />
+                                            </ScrollViewer>
+                                        </Border>
+                                        <TextBlock Classes="hint"
+                                                   Text="마지막 500줄까지만 표시합니다. 전체 로그는 폴더에서 확인하세요." />
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <!-- Updates -->
+                                <StackPanel IsVisible="{Binding IsCategoryUpdates}" Spacing="20">
+                                    <TextBlock Text="업데이트" Classes="sectionTitle" />
+
+                                    <StackPanel Spacing="6">
+                                        <TextBlock Classes="label" Text="현재 빌드" />
+                                        <TextBlock Text="{Binding AppBuildLabel}"
+                                                   Foreground="White" FontSize="13"
+                                                   FontFamily="Cascadia Code,Consolas,Courier New,monospace" />
+                                    </StackPanel>
+
+                                    <Button Classes="ghost aligned" HorizontalAlignment="Left"
+                                            Command="{Binding CheckForUpdatesCommand}"
+                                            Content="지금 확인" />
+                                </StackPanel>
+
+                                <!-- About -->
+                                <StackPanel IsVisible="{Binding IsCategoryAbout}" Spacing="20">
+                                    <TextBlock Text="정보" Classes="sectionTitle" />
+
+                                    <StackPanel Orientation="Horizontal" Spacing="16">
+                                        <Image Source="avares://MashiroLauncher/Assets/AppIcon.png"
+                                               Width="64" Height="64"
+                                               VerticalAlignment="Center" />
+                                        <StackPanel VerticalAlignment="Center" Spacing="2">
+                                            <TextBlock Text="Mashiro Launcher" Foreground="White" FontSize="18" />
+                                            <TextBlock Text="v0.1" Foreground="#80FFFFFF" FontSize="12" />
+                                        </StackPanel>
+                                    </StackPanel>
+
+                                    <StackPanel Spacing="6">
+                                        <TextBlock Classes="label" Text="- 빌드" />
+                                        <TextBlock Text="{Binding AppBuildLabel}"
+                                                   Foreground="#A0FFFFFF" FontSize="12"
+                                                   FontFamily="Cascadia Code,Consolas,Courier New,monospace" />
+                                    </StackPanel>
+
+                                    <StackPanel Spacing="6">
+                                        <TextBlock Classes="label" Text="- 기술 스택" />
+                                        <TextBlock Text="C# .NET 10 · Avalonia 12" Foreground="#A0FFFFFF" FontSize="12" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </StackPanel>
+                        </ScrollViewer>
+
+                        <Button Classes="icon"
+                                HorizontalAlignment="Right" VerticalAlignment="Top"
+                                Margin="0,14,14,0"
+                                Command="{Binding CloseSettingsCommand}"
+                                Content="✕" />
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
+
+        <!-- Update notification: top-right, sits above the settings overlay -->
+        <Border IsVisible="{Binding HasPendingUpdate}"
+                HorizontalAlignment="Right" VerticalAlignment="Top"
+                Margin="0,18,18,0"
+                MaxWidth="320"
+                Background="#1F1F1F" CornerRadius="10"
+                BorderBrush="#5BC54E" BorderThickness="1"
+                Padding="14"
+                BoxShadow="0 6 22 -2 #80000000">
+            <StackPanel Spacing="10">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Ellipse Width="8" Height="8" Fill="#5BC54E" VerticalAlignment="Center" />
+                    <TextBlock Text="새 빌드가 있어요"
+                               Foreground="White" FontSize="13" FontWeight="SemiBold"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+                <TextBlock Foreground="#A0FFFFFF" FontSize="11">
+                    <Run Text="버전: " />
+                    <Run Text="{Binding PendingUpdate.ShortSha}"
+                         FontFamily="Cascadia Code,Consolas,Courier New,monospace"
+                         Foreground="#5BC54E" />
+                </TextBlock>
+                <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right">
+                    <Button Classes="ghost"
+                            Command="{Binding DismissUpdateCommand}"
+                            Content="건너뛰기" />
+                    <Button Classes="ghost"
+                            Command="{Binding InstallUpdateCommand}"
+                            Content="지금 업데이트" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- Installing in progress: replaces the notification while downloading -->
+        <Border IsVisible="{Binding IsInstallingUpdate}"
+                HorizontalAlignment="Right" VerticalAlignment="Top"
+                Margin="0,18,18,0"
+                MaxWidth="320"
+                Background="#1F1F1F" CornerRadius="10"
+                BorderBrush="#5BC54E" BorderThickness="1"
+                Padding="14"
+                BoxShadow="0 6 22 -2 #80000000">
+            <StackPanel Spacing="10">
+                <TextBlock Text="업데이트 다운로드 중…"
+                           Foreground="White" FontSize="13" FontWeight="SemiBold" />
+                <ProgressBar Value="{Binding UpdateDownloadProgress}" Maximum="1"
+                             Foreground="#5BC54E" Background="#3F3F3F" Height="6" />
+                <TextBlock Text="설치 후 자동으로 재시작됩니다."
+                           Foreground="#A0FFFFFF" FontSize="10" />
+            </StackPanel>
+        </Border>
+
+        <!-- =====================================================================
+             Mod detail overlay. Sits as the last child of the root Grid so it
+             z-orders above everything. Backdrop captures clicks (no click-through
+             to controls behind), and the inner card holds the description +
+             version picker. ESC closes via a KeyBinding on the backdrop.
+             ===================================================================== -->
+        <Border IsVisible="{Binding IsModDetailOpen}"
+                Background="#C0000000"
+                Focusable="True">
+            <Border.KeyBindings>
+                <KeyBinding Gesture="Escape" Command="{Binding ModDetail.CloseCommand}" />
+            </Border.KeyBindings>
+            <Border DataContext="{Binding ModDetail}"
+                    x:DataType="vm:ModDetailViewModel"
+                    Width="720" MaxHeight="560"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Background="#181818" CornerRadius="14"
+                    BorderBrush="#2A2A2A" BorderThickness="1"
+                    BoxShadow="0 12 36 -2 #B0000000"
+                    Padding="20">
+                <Grid RowDefinitions="Auto,*,Auto" RowSpacing="12">
+
+                    <!-- Header: icon + title + meta + close ✕ -->
+                    <Grid Grid.Row="0" ColumnDefinitions="56,*,Auto" ColumnSpacing="12">
+                        <Border Grid.Column="0"
+                                Width="56" Height="56"
+                                Background="#2F2F2F" CornerRadius="8"
+                                ClipToBounds="True">
+                            <Image Source="{Binding Icon}" Stretch="UniformToFill" />
+                        </Border>
+                        <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Title}"
+                                       Foreground="White" FontSize="17" FontWeight="SemiBold"
+                                       TextTrimming="CharacterEllipsis" />
+                            <TextBlock Foreground="#A0FFFFFF" FontSize="11">
+                                <Run Text="by " />
+                                <Run Text="{Binding Author}" />
+                            </TextBlock>
+                            <TextBlock Text="{Binding CategoriesLabel}"
+                                       Foreground="#70FFFFFF" FontSize="10"
+                                       TextTrimming="CharacterEllipsis"
+                                       IsVisible="{Binding CategoriesLabel, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                            <TextBlock Text="{Binding UpdatedLabel}"
+                                       Foreground="#70FFFFFF" FontSize="10"
+                                       IsVisible="{Binding UpdatedLabel, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                        </StackPanel>
+                        <Button Grid.Column="2" Classes="icon"
+                                VerticalAlignment="Top"
+                                Command="{Binding CloseCommand}"
+                                Content="✕" />
+                    </Grid>
+
+                    <!-- Body: scrollable description (long markdown rendered as plain text for now) -->
+                    <Border Grid.Row="1"
+                            Background="#1F1F1F" CornerRadius="8"
+                            BorderBrush="#28FFFFFF" BorderThickness="1"
+                            Padding="14">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <TextBlock Text="{Binding Description}"
+                                       Foreground="#DDFFFFFF" FontSize="12"
+                                       TextWrapping="Wrap" />
+                        </ScrollViewer>
+                    </Border>
+
+                    <!-- Footer: version picker + install/installed action -->
+                    <Grid Grid.Row="2" ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                        <StackPanel Grid.Column="0" Spacing="3">
+                            <TextBlock Classes="label" Text="버전 선택" />
+                            <ComboBox ItemsSource="{Binding Versions}"
+                                      SelectedItem="{Binding SelectedVersion}"
+                                      HorizontalAlignment="Stretch"
+                                      IsEnabled="{Binding !IsLoading}">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <TextBlock Text="{Binding VersionNumber}"
+                                                       Foreground="White" FontSize="12"
+                                                       FontWeight="SemiBold" />
+                                            <TextBlock Text="{Binding Name}"
+                                                       Foreground="#A0FFFFFF" FontSize="11"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <TextBlock Text="이 인스턴스와 호환되는 버전이 없습니다."
+                                       Foreground="#FFB0B0" FontSize="10"
+                                       IsVisible="{Binding HasNoCompatibleVersion}" />
+                        </StackPanel>
+
+                        <!-- Mutually exclusive action states (mirrors the card layout) -->
+                        <Panel Grid.Column="1" VerticalAlignment="Bottom" MinWidth="120">
+                            <Button Classes="ghost"
+                                    HorizontalAlignment="Right"
+                                    IsVisible="{Binding CanInstallSelected}"
+                                    Command="{Binding InstallSelectedCommand}"
+                                    Content="이 버전 설치" />
+                            <Border IsVisible="{Binding IsInstalling}"
+                                    HorizontalAlignment="Right"
+                                    Background="#1F1F1F"
+                                    BorderBrush="#5BC54E" BorderThickness="1"
+                                    CornerRadius="6"
+                                    Padding="8,4">
+                                <StackPanel Orientation="Horizontal" Spacing="8"
+                                            VerticalAlignment="Center">
+                                    <TextBlock Text="설치 중..."
+                                               Foreground="#5BC54E" FontSize="12"
+                                               VerticalAlignment="Center" />
+                                    <ProgressBar Classes="spinner"
+                                                 VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Border>
+                            <Border IsVisible="{Binding IsInstalled}"
+                                    HorizontalAlignment="Right"
+                                    Background="#2A2A2A"
+                                    BorderBrush="#3A3A3A" BorderThickness="1"
+                                    CornerRadius="6"
+                                    Padding="10,4">
+                                <TextBlock Text="설치됨"
+                                           Foreground="#90FFFFFF" FontSize="12"
+                                           VerticalAlignment="Center" />
+                            </Border>
+                        </Panel>
+                    </Grid>
+                </Grid>
+            </Border>
+        </Border>
+
+        <!-- =====================================================================
+             "이미 실행 중" info overlay. Shown when the user tries to launch
+             the same instance (or same quick combo) twice. Same-instance
+             double-launch is blocked outright — Minecraft's session.lock would
+             refuse the second copy anyway. Different instances stay free to
+             run in parallel (no overlay).
+             ===================================================================== -->
+        <Border IsVisible="{Binding IsLaunchConfirmOpen}"
+                Background="#C0000000"
+                Focusable="True">
+            <Border.KeyBindings>
+                <KeyBinding Gesture="Escape" Command="{Binding DismissLaunchWarningCommand}" />
+            </Border.KeyBindings>
+            <Border Width="380"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Background="#181818" CornerRadius="14"
+                    BorderBrush="#2A2A2A" BorderThickness="1"
+                    BoxShadow="0 12 36 -2 #B0000000"
+                    Padding="24">
+                <StackPanel Spacing="14">
+                    <TextBlock Text="이미 실행 중"
+                               Foreground="White" FontSize="15" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding LaunchConfirmMessage}"
+                               Foreground="#C8FFFFFF" FontSize="13"
+                               TextWrapping="Wrap" />
+                    <TextBlock Text="다른 인스턴스라면 제한 없이 동시 실행할 수 있어요."
+                               Foreground="#80FFFFFF" FontSize="11"
+                               TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                        <Button Classes="ghost"
+                                Command="{Binding DismissLaunchWarningCommand}" Content="확인" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Border>
+    </Grid>
+</Window>
