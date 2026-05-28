@@ -14,7 +14,7 @@
 
 ## 다운로드
 
-[최신 빌드 받기](https://github.com/AkaiMashiro/MashiroLauncher/releases/latest) — `Launcher.App.exe` 파일 하나면 됩니다. 별도 설치 과정 없음.
+[최신 빌드 받기](https://github.com/AkaiMashiro/MashiroLauncher/releases/latest) — `MashiroLauncher.exe` 파일 하나면 됩니다. 별도 설치 과정 없음.
 
 ## 직접 빌드
 

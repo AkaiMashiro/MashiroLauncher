@@ -7,6 +7,10 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets/AppIcon.ico</ApplicationIcon>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <!-- Friendly output name. Without this, build/publish emit Launcher.App.exe
+         (csproj filename default). Users see MashiroLauncher.exe in Releases and
+         in the running process list. -->
+    <AssemblyName>MashiroLauncher</AssemblyName>
     <!-- Pulled in only so we can host the Microsoft.Web.WebView2 control for the
          interactive MS login. Avalonia remains the main UI; WinForms is one
          transient sign-in popup. -->

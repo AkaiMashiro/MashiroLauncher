@@ -68,7 +68,7 @@ jobs:
           Commit message: ${{ github.event.head_commit.message }}
           "@
           gh release create $tag `
-            publish/Launcher.App.exe `
+            publish/MashiroLauncher.exe `
             --title $title `
             --notes $notes `
             --target ${{ github.sha }}
