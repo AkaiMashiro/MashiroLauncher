@@ -15,18 +15,19 @@ public sealed class MicrosoftAuthChain(HttpClient http)
     private readonly XboxAuth _xbox = new(http);
     private readonly MinecraftAuth _mc = new(http);
 
-    /// <summary>Step 1 of OOB sign-in: open this URL in the user's browser.</summary>
-    public (string Url, string State) BuildAuthorizationUrl() =>
+    /// <summary>Step 1: build the authorize URL to load in the WebView. Returns
+    /// the URL plus the PKCE session (state + verifier) to pass back to step 2.</summary>
+    public (string Url, PkceSession Session) BuildAuthorizationUrl() =>
         _oauth.BuildAuthorizationUrl();
 
     /// <summary>
-    /// Step 2: user pasted the redirect URL from the browser back into the
-    /// launcher. Trade the code for tokens and complete the Xbox/XSTS/MC chain.
+    /// Step 2: the WebView captured the redirect URL. Trade the code (+ PKCE
+    /// verifier from the session) for tokens and complete the Xbox/XSTS/MC chain.
     /// </summary>
     public async Task<SignInResult> CompleteSignInAsync(
-        string callbackUrl, string expectedState, CancellationToken ct = default)
+        string callbackUrl, PkceSession session, CancellationToken ct = default)
     {
-        var ms = await _oauth.ExchangeCallbackUrlAsync(callbackUrl, expectedState, ct);
+        var ms = await _oauth.ExchangeCallbackUrlAsync(callbackUrl, session, ct);
         return await CompleteChainAsync(ms, ct);
     }
 

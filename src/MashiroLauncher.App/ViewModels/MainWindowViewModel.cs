@@ -20,7 +20,7 @@ namespace MashiroLauncher.App.ViewModels;
 public enum LaunchState { Idle, Preparing, Running }
 public enum StatusKind { None, Info, Success, Error }
 public enum AppView { Welcome, AccountSelection, JavaPlay, BedrockPlay }
-public enum SettingsCategory { General, Appearance, Mods, Instances, Advanced, Developer, Updates, About }
+public enum SettingsCategory { General, Appearance, Accounts, Mods, Instances, Advanced, Developer, Updates, About }
 
 public partial class MainWindowViewModel : ObservableObject, IInstanceCommands, IModCommands, IModDetailCommands
 {
@@ -31,6 +31,7 @@ public partial class MainWindowViewModel : ObservableObject, IInstanceCommands, 
     private readonly UiLaunchService _launchService;
     private readonly MicrosoftAuthService _msAuth;
     private readonly UpdateService _updateService;
+    private readonly AvatarService _avatarService;
     private readonly ModrinthClient _modrinth;
     private readonly ModrinthInstaller _modInstaller;
     private readonly InstanceStorage _instanceStorage = new();
@@ -48,6 +49,7 @@ public partial class MainWindowViewModel : ObservableObject, IInstanceCommands, 
         UiLaunchService launchService,
         MicrosoftAuthService msAuth,
         UpdateService updateService,
+        AvatarService avatarService,
         Func<Task<string?>> pickImageAsync,
         Func<Task<IReadOnlyList<string>?>> pickModFilesAsync,
         Func<Task<string?>> pickMrpackAsync,
@@ -61,6 +63,7 @@ public partial class MainWindowViewModel : ObservableObject, IInstanceCommands, 
         _launchService = launchService;
         _msAuth = msAuth;
         _updateService = updateService;
+        _avatarService = avatarService;
         _modrinth = new ModrinthClient(http);
         _modInstaller = new ModrinthInstaller(http);
         _pickImageAsync = pickImageAsync;
@@ -87,6 +90,7 @@ public partial class MainWindowViewModel : ObservableObject, IInstanceCommands, 
         MaxMemoryMbValue = settings.MaxMemoryMb;
         CustomJvmArgs = settings.CustomJvmArgs;
         _isInstanceModeEnabled = settings.UseInstanceMode;  // backing field set so OnChanged doesn't fire during init
+        _showInstanceAdvancedButton = settings.ShowInstanceAdvancedButton;
 
         // Default the sort picker to 다운로드순. Set via backing field so the
         // OnChanged handler doesn't fire a no-op search before SelectedModInstance
@@ -116,13 +120,278 @@ public partial class MainWindowViewModel : ObservableObject, IInstanceCommands, 
             OnPropertyChanged(nameof(LaunchButtonText));
             OnPropertyChanged(nameof(HasActiveLaunch));
         };
+
+        // Signed-in account collection drives HasAnyAccount + the per-instance
+        // account ComboBox option list (Default + Offline + N MS accounts) and
+        // the wrapper cards used by AccountSelection / Settings → 계정 / the
+        // Play view's profile box.
+        SignedInAccounts.CollectionChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(HasAnyAccount));
+            OnPropertyChanged(nameof(AddAccountButtonText));
+            OnPropertyChanged(nameof(AccountSelectorOptions));
+            RebuildSignedInAccountCards();
+            OnPropertyChanged(nameof(ActiveAccountCard));
+            // Per-instance cards each render their own avatar + advanced
+            // account picker; push a refresh so a newly-added (or signed-out)
+            // account propagates everywhere without forcing the user to close
+            // + reopen settings.
+            foreach (var card in Instances)
+            {
+                _ = card.RefreshAccountInfoAsync();
+                card.NotifyAvailableAccountsChanged();
+            }
+        };
     }
+
+    /// <summary>One per signed-in MS account. Bound by the AccountSelection list + Settings → 계정.</summary>
+    public ObservableCollection<SignedInAccountCardViewModel> SignedInAccountCards { get; } = [];
+
+    private void RebuildSignedInAccountCards()
+    {
+        SignedInAccountCards.Clear();
+        foreach (var account in SignedInAccounts)
+            SignedInAccountCards.Add(new SignedInAccountCardViewModel(account, this, _avatarService));
+    }
+
+    /// <summary>
+    /// Card-click handler from <see cref="SignedInAccountCardViewModel"/>: make
+    /// the picked account active, leave offline mode, and navigate to Play.
+    ///
+    /// Guards the per-instance account conflict: if the Play view has a
+    /// Specific-bound instance selected (instance mode) whose still-signed-in
+    /// account differs from the one just picked, the instance will launch with
+    /// its own bound account regardless of the active selection — so we warn
+    /// and let the user cancel before the change is applied.
+    /// </summary>
+    public void OnAccountSelectedFromList(MicrosoftAccount account)
+    {
+        var existing = SignedInAccounts.FirstOrDefault(a => a.Uuid == account.Uuid);
+        if (existing is null) return;
+
+        var (inst, bound, offlinePinned) = GetSelectedInstanceFixedIdentity();
+        // Conflict when the selected instance imposes a different identity than
+        // the account just picked: an offline-pinned instance (always differs
+        // from an MS account) or a Specific instance bound to someone else.
+        var conflict = inst is not null && (offlinePinned || bound!.Uuid != existing.Uuid);
+        if (conflict)
+        {
+            _onAccountConflictConfirmed = () => ApplyAccountSelection(existing);
+            PendingAccountConflict = new AccountConflictRequest(
+                inst!.Name,
+                BoundIsOffline: offlinePinned, BoundAccountName: bound?.Username,
+                SwitchIsOffline: false, NewAccountName: existing.Username);
+            return;  // hold off until the user confirms / cancels the overlay
+        }
+
+        ApplyAccountSelection(existing);
+    }
+
+    /// <summary>Commit a picked account as active + jump to Play. Shared by the
+    /// no-conflict path and the "계속" branch of the conflict overlay.</summary>
+    private void ApplyAccountSelection(MicrosoftAccount account)
+    {
+        IsOfflineMode = false;
+        ActiveAccount = account;
+        CurrentView = AppView.JavaPlay;
+        ClearStatus();
+    }
+
+    // ---- Per-instance account conflict overlay ------------------------------
+    //
+    // Specific-bound instances always launch with their own account, ignoring
+    // the global active selection (and global offline mode). Switching the
+    // active account — or choosing "오프라인으로 플레이" — while such an instance
+    // is selected would make the Play view show one identity but launch another,
+    // so we surface a warning the user can cancel. The action to run on "계속"
+    // is captured per-trigger so the same overlay serves both paths.
+
+    /// <summary>Active conflict request; null when the overlay is closed. The
+    /// message adapts to an account switch vs an offline switch.</summary>
+    public sealed record AccountConflictRequest(
+        string InstanceName,
+        bool BoundIsOffline, string? BoundAccountName,
+        bool SwitchIsOffline, string? NewAccountName)
+    {
+        public string Message
+        {
+            get
+            {
+                var line1 = BoundIsOffline
+                    ? $"'{InstanceName}' 인스턴스는 오프라인 모드로 고정되어 있어요.\n"
+                    : $"'{InstanceName}' 인스턴스는 '{BoundAccountName}' 계정에 고정되어 있어요.\n";
+                var line2 = SwitchIsOffline
+                    ? "계속하면 오프라인 모드로 전환되지만,\n"
+                    : $"계속하면 활성 계정은 '{NewAccountName}'(으)로 바뀌지만,\n";
+                var line3 = BoundIsOffline
+                    ? "이 인스턴스는 여전히 오프라인 모드로 실행됩니다."
+                    : $"이 인스턴스는 여전히 '{BoundAccountName}'(으)로 실행됩니다.";
+                return line1 + line2 + line3;
+            }
+        }
+    }
+
+    [ObservableProperty] private AccountConflictRequest? _pendingAccountConflict;
+
+    /// <summary>What "계속" runs — set to either an account switch or going offline.</summary>
+    private Action? _onAccountConflictConfirmed;
+
+    public bool IsAccountConflictOpen => PendingAccountConflict is not null;
+
+    partial void OnPendingAccountConflictChanged(AccountConflictRequest? value) =>
+        OnPropertyChanged(nameof(IsAccountConflictOpen));
+
+    [RelayCommand]
+    private void ConfirmAccountSwitch()
+    {
+        var act = _onAccountConflictConfirmed;
+        PendingAccountConflict = null;
+        _onAccountConflictConfirmed = null;
+        act?.Invoke();
+    }
+
+    /// <summary>Dismiss the conflict overlay without applying — the active
+    /// account stays as the instance's bound account, keeping display == launch.</summary>
+    [RelayCommand]
+    private void CancelAccountSwitch()
+    {
+        PendingAccountConflict = null;
+        _onAccountConflictConfirmed = null;
+    }
+
+    /// <summary>
+    /// The selected Play instance's *fixed* launch identity, if any — a choice
+    /// it imposes regardless of the global active account / offline mode:
+    ///   - Specific (bound account still signed in) → (inst, account, false)
+    ///   - Offline                                  → (inst, null, true)
+    ///   - Default, or Specific-but-signed-out      → (null, null, false)
+    /// Only meaningful in instance mode. The last group imposes nothing (the
+    /// launch follows the global selection), so it reports "no fixed identity."
+    /// </summary>
+    private (Instance? Inst, MicrosoftAccount? BoundAccount, bool IsOfflinePinned)
+        GetSelectedInstanceFixedIdentity()
+    {
+        if (!IsInstanceModeEnabled) return (null, null, false);
+        var model = SelectedPlayInstance?.Model;
+        if (model is null) return (null, null, false);
+        if (model.AccountMode == InstanceAccountMode.Offline)
+            return (model, null, true);
+        if (model.AccountMode == InstanceAccountMode.Specific)
+        {
+            var bound = SignedInAccounts.FirstOrDefault(a =>
+                string.Equals(a.Uuid.ToString("N"), model.SpecificAccountId, StringComparison.OrdinalIgnoreCase));
+            return bound is null ? (null, null, false) : (model, bound, false);
+        }
+        return (null, null, false);  // Default → follows the global selection
+    }
+
+    /// <summary>
+    /// ⎋ button handler from <see cref="SignedInAccountCardViewModel"/>. Doesn't
+    /// sign out immediately — pops the confirmation overlay; the actual removal
+    /// happens in <see cref="ConfirmSignOutAsync"/> if the user clicks 로그아웃.
+    /// </summary>
+    public Task SignOutAccountFromCardAsync(MicrosoftAccount account)
+    {
+        PendingSignOut = new PendingSignOutRequest(
+            Specific: account,
+            IsAll: false,
+            Message: $"'{account.Username}' 계정에서 정말로 로그아웃 하시겠습니까?");
+        return Task.CompletedTask;
+    }
+
+    // ---- Sign-out confirmation overlay --------------------------------------
+    //
+    // All logout paths route through PendingSignOut so the modal can ask one
+    // last time before destroying the on-disk account file. Per-account ⎋
+    // buttons (Play view + AccountSelection + Settings → 계정 cards) and the
+    // "전체 로그아웃" button all set this; ConfirmSignOutAsync then dispatches
+    // to the matching Execute* helper.
+
+    /// <summary>Active sign-out request. Null when the confirmation overlay is closed.</summary>
+    public sealed record PendingSignOutRequest(
+        MicrosoftAccount? Specific,
+        bool IsAll,
+        string Message);
+
+    [ObservableProperty] private PendingSignOutRequest? _pendingSignOut;
+
+    public bool IsSignOutConfirmOpen => PendingSignOut is not null;
+
+    partial void OnPendingSignOutChanged(PendingSignOutRequest? value) =>
+        OnPropertyChanged(nameof(IsSignOutConfirmOpen));
+
+    [RelayCommand]
+    private async Task ConfirmSignOutAsync()
+    {
+        var req = PendingSignOut;
+        if (req is null) return;
+        PendingSignOut = null;
+        if (req.IsAll)
+            ExecuteSignOutAll();
+        else if (req.Specific is not null)
+            await ExecuteSignOutAccountAsync(req.Specific);
+    }
+
+    [RelayCommand]
+    private void CancelSignOut() => PendingSignOut = null;
+
+    /// <summary>One row in the per-instance account ComboBox. Heterogeneous so a
+    /// single picker covers Default/Offline sentinels plus every signed-in MS account.</summary>
+    public sealed record AccountSelectorOption(
+        InstanceAccountMode Mode,
+        MicrosoftAccount? Account,
+        string DisplayLabel)
+    {
+        /// <summary>Stable key used as ComboBox SelectedValue.</summary>
+        public string Key => Mode switch
+        {
+            InstanceAccountMode.Default  => "default",
+            InstanceAccountMode.Offline  => "offline",
+            InstanceAccountMode.Specific => $"specific:{Account?.Uuid:N}",
+            _ => "default",
+        };
+    }
+
+    /// <summary>Default + Offline sentinels followed by every signed-in MS account.</summary>
+    public IReadOnlyList<AccountSelectorOption> AccountSelectorOptions
+    {
+        get
+        {
+            var list = new List<AccountSelectorOption>
+            {
+                new(InstanceAccountMode.Default, null, "기본 (활성 계정)"),
+                new(InstanceAccountMode.Offline, null, "오프라인 모드"),
+            };
+            foreach (var acct in SignedInAccounts)
+                list.Add(new(InstanceAccountMode.Specific, acct, acct.Username));
+            return list;
+        }
+    }
+
+    /// <summary>
+    /// The signed-in card matching <see cref="ActiveAccount"/>. The Play view
+    /// shows this in a profile box (same shape as the AccountSelection cards)
+    /// so the user sees who's about to launch without having to re-open the
+    /// selection screen.
+    /// </summary>
+    public SignedInAccountCardViewModel? ActiveAccountCard =>
+        ActiveAccount is null
+            ? null
+            : SignedInAccountCards.FirstOrDefault(c => c.Uuid == ActiveAccount.Uuid);
+
+    /// <summary>
+    /// True when the Play view should render the active-account profile box.
+    /// Offline-mode overrides hide it so the username TextBox above is the
+    /// only thing claiming the launch identity.
+    /// </summary>
+    public bool ShowAccountProfile => IsSignedIn && !IsOfflineMode;
 
     public ObservableCollection<string> AvailableVersions { get; } = [];
     public ObservableCollection<InstanceItemViewModel> Instances { get; } = [];
 
     public bool IsCategoryGeneral    => SettingsCategory == SettingsCategory.General;
     public bool IsCategoryAppearance => SettingsCategory == SettingsCategory.Appearance;
+    public bool IsCategoryAccounts   => SettingsCategory == SettingsCategory.Accounts;
     public bool IsCategoryMods       => SettingsCategory == SettingsCategory.Mods;
     public bool IsCategoryInstances  => SettingsCategory == SettingsCategory.Instances;
     public bool IsCategoryAdvanced   => SettingsCategory == SettingsCategory.Advanced;
@@ -134,6 +403,7 @@ public partial class MainWindowViewModel : ObservableObject, IInstanceCommands, 
     {
         OnPropertyChanged(nameof(IsCategoryGeneral));
         OnPropertyChanged(nameof(IsCategoryAppearance));
+        OnPropertyChanged(nameof(IsCategoryAccounts));
         OnPropertyChanged(nameof(IsCategoryMods));
         OnPropertyChanged(nameof(IsCategoryInstances));
         OnPropertyChanged(nameof(IsCategoryAdvanced));
@@ -166,7 +436,8 @@ public partial class MainWindowViewModel : ObservableObject, IInstanceCommands, 
                 (int)MinMemoryMbValue,
                 (int)MaxMemoryMbValue,
                 CustomJvmArgs ?? "",
-                IsInstanceModeEnabled);
+                IsInstanceModeEnabled,
+                ShowInstanceAdvancedButton);
             new SettingsStorage().Save(settings);
             SetStatus("설정이 저장되었습니다", StatusKind.Success);
         }
@@ -314,7 +585,6 @@ public partial class MainWindowViewModel : ObservableObject, IInstanceCommands, 
     [ObservableProperty] private StatusKind _statusKind = StatusKind.None;
     [ObservableProperty] private bool _isSettingsOpen;
     [ObservableProperty] private AppView _currentView = AppView.Welcome;
-    [ObservableProperty] private MicrosoftAccount? _signedInAccount;
     [ObservableProperty] private bool _isAuthenticating;
     [ObservableProperty] private BedrockInstallInfo? _bedrockInfo;
     [ObservableProperty] private bool _isBedrockInstalling;
@@ -323,6 +593,16 @@ public partial class MainWindowViewModel : ObservableObject, IInstanceCommands, 
     [ObservableProperty] private decimal _minMemoryMbValue = 512m;
     [ObservableProperty] private decimal _maxMemoryMbValue = 4096m;
     [ObservableProperty] private string _customJvmArgs = "";
+
+    // ---- Multi-account state ------------------------------------------------
+    //
+    // SignedInAccounts holds every Microsoft account the user has signed into;
+    // ActiveAccount is whichever one Play uses for instances on AccountMode.Default
+    // (with the global IsOfflineMode toggle taking precedence). Both update
+    // together — switching the active account just changes the pointer; signing
+    // out removes the entry from the collection.
+    public ObservableCollection<MicrosoftAccount> SignedInAccounts { get; } = [];
+    [ObservableProperty] private MicrosoftAccount? _activeAccount;
 
     // Play view — two interchangeable modes, controlled by IsInstanceModeEnabled
     // (persisted launcher setting, toggle lives in Settings → 일반):
@@ -333,17 +613,62 @@ public partial class MainWindowViewModel : ObservableObject, IInstanceCommands, 
     [ObservableProperty] private bool _isInstanceModeEnabled;
     [ObservableProperty] private InstanceItemViewModel? _selectedPlayInstance;
 
+    // Settings → 고급의 "고급 옵션 표시" 토글 (persisted). OFF by default —
+    // each instance card's "고급" button only renders when this is true so
+    // casual users don't see JVM tweaks unless they explicitly enable them.
+    [ObservableProperty] private bool _showInstanceAdvancedButton;
+
     partial void OnIsInstanceModeEnabledChanged(bool value)
     {
         PersistLauncherSettings();
         LaunchCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(CanLaunch));
+        NotifyPlayUsernameState();
     }
+
+    partial void OnShowInstanceAdvancedButtonChanged(bool value) =>
+        PersistLauncherSettings();
 
     partial void OnSelectedPlayInstanceChanged(InstanceItemViewModel? value)
     {
         LaunchCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(CanLaunch));
+        SyncActiveAccountToInstance(value?.Model);
+        NotifyPlayUsernameState();
+    }
+
+    /// <summary>
+    /// Keep the Play view's account display honest with the selected instance.
+    /// When you pick an instance bound to a specific Microsoft account, the
+    /// launcher's active account switches to match it (so the profile box shows
+    /// who's actually going to launch — no mismatch, no surprise at PLAY time).
+    ///   - Specific + that account still signed in → make it active (clears offline).
+    ///   - Offline                                  → flip to offline display.
+    ///   - Default                                  → leave the current default as-is.
+    ///   - Specific but the account was signed out  → leave as-is; the launch-time
+    ///                                                 fallback toast (Q4.A) explains it.
+    /// </summary>
+    private void SyncActiveAccountToInstance(Instance? instance)
+    {
+        if (instance is null) return;
+        switch (instance.AccountMode)
+        {
+            case InstanceAccountMode.Specific:
+                var target = SignedInAccounts.FirstOrDefault(a =>
+                    string.Equals(a.Uuid.ToString("N"), instance.SpecificAccountId, StringComparison.OrdinalIgnoreCase));
+                if (target is not null)
+                {
+                    IsOfflineMode = false;
+                    ActiveAccount = target;
+                }
+                break;
+            case InstanceAccountMode.Offline:
+                IsOfflineMode = true;
+                break;
+            case InstanceAccountMode.Default:
+            default:
+                break;
+        }
     }
 
     private void PersistLauncherSettings()
@@ -354,7 +679,8 @@ public partial class MainWindowViewModel : ObservableObject, IInstanceCommands, 
                 (int)MinMemoryMbValue,
                 (int)MaxMemoryMbValue,
                 CustomJvmArgs ?? "",
-                IsInstanceModeEnabled));
+                IsInstanceModeEnabled,
+                ShowInstanceAdvancedButton));
         }
         catch { /* best-effort */ }
     }
@@ -1074,9 +1400,12 @@ public partial class MainWindowViewModel : ObservableObject, IInstanceCommands, 
         _                  => new SolidColorBrush(Color.Parse("#888888")),
     };
 
-    public bool IsSignedIn => SignedInAccount is not null;
+    public bool IsSignedIn => ActiveAccount is not null;
 
-    public string SignedInUsername => SignedInAccount?.Username ?? "";
+    /// <summary>True when at least one Microsoft account exists in the store, regardless of active selection.</summary>
+    public bool HasAnyAccount => SignedInAccounts.Count > 0;
+
+    public string SignedInUsername => ActiveAccount?.Username ?? "";
 
     // "Offline mode forced" flag — set when the user clicks 오프라인으로 플레이
     // even if they're already signed into Microsoft. Cleared when they
@@ -1086,24 +1415,58 @@ public partial class MainWindowViewModel : ObservableObject, IInstanceCommands, 
     /// <summary>True when the Play view should ask for a username (offline).</summary>
     public bool ShowUsernameInput => !IsSignedIn || IsOfflineMode;
 
-    /// <summary>True when the Play view should display the MS account chip.</summary>
-    public bool ShowAccountChip => IsSignedIn && !IsOfflineMode;
+    /// <summary>
+    /// True when the selected Play instance pins offline mode AND carries its own
+    /// offline nickname. In that case the username field shows that fixed nickname
+    /// read-only — editing it wouldn't matter, since the launch uses the
+    /// instance's OfflineUsername regardless.
+    /// </summary>
+    public bool IsOfflineUsernameLocked =>
+        IsInstanceModeEnabled
+        && SelectedPlayInstance?.Model is { AccountMode: InstanceAccountMode.Offline, OfflineUsername: { Length: > 0 } };
+
+    /// <summary>
+    /// What the Play-view username field binds to. When an offline instance with
+    /// a fixed nickname is selected it surfaces (read-only) that nickname;
+    /// otherwise it proxies the editable global <see cref="Username"/>. Writes are
+    /// ignored while locked (the TextBox is also IsReadOnly, this is belt-and-braces).
+    /// </summary>
+    public string PlayUsername
+    {
+        get => IsOfflineUsernameLocked
+            ? SelectedPlayInstance!.Model.OfflineUsername!
+            : Username;
+        set { if (!IsOfflineUsernameLocked) Username = value; }
+    }
+
+    /// <summary>Re-raise everything the locked-nickname state touches. Called when
+    /// the selected instance or the play-mode toggle changes.</summary>
+    private void NotifyPlayUsernameState()
+    {
+        OnPropertyChanged(nameof(IsOfflineUsernameLocked));
+        OnPropertyChanged(nameof(PlayUsername));
+        OnPropertyChanged(nameof(UsernameHint));
+        OnPropertyChanged(nameof(IsUsernameHintVisible));
+        OnPropertyChanged(nameof(HasUsernameWarning));
+        OnPropertyChanged(nameof(CanLaunch));
+        LaunchCommand.NotifyCanExecuteChanged();
+    }
 
     partial void OnIsOfflineModeChanged(bool value)
     {
         OnPropertyChanged(nameof(ShowUsernameInput));
-        OnPropertyChanged(nameof(ShowAccountChip));
+        OnPropertyChanged(nameof(ShowAccountProfile));
         OnPropertyChanged(nameof(CanLaunch));
         LaunchCommand.NotifyCanExecuteChanged();
     }
 
     /// <summary>
-    /// Label on the Microsoft button in AccountSelection — switches to a
-    /// "continue as" hint when the user is already signed in (e.g. after they
-    /// hit "back" from the Play view).
+    /// Label on the "+ 계정 추가" button. With zero accounts it's the primary
+    /// "Microsoft로 로그인" CTA; with at least one signed in it shifts to a
+    /// supporting "+ 계정 추가" label so the existing cards stay primary.
     /// </summary>
-    public string MicrosoftButtonText => IsSignedIn
-        ? $"{SignedInUsername} 님으로 계속"
+    public string AddAccountButtonText => HasAnyAccount
+        ? "Microsoft 계정 추가"
         : "Microsoft로 로그인";
 
     public bool IsWelcomeView    => CurrentView == AppView.Welcome;
@@ -1169,16 +1532,20 @@ public partial class MainWindowViewModel : ObservableObject, IInstanceCommands, 
         Username.Length is >= 3 and <= 16
         && Username.All(IsValidUsernameChar);
 
-    public string UsernameHint => Username.Length switch
-    {
-        0   => "3–16자 · A–Z 0–9 _",
-        < 3 => "최소 3자 이상",
-        _   => Username.All(IsValidUsernameChar) ? "" : "허용된 문자만 입력 가능",
-    };
+    public string UsernameHint => IsOfflineUsernameLocked
+        ? "이 인스턴스에 고정된 오프라인 닉네임이에요"
+        : Username.Length switch
+        {
+            0   => "3–16자 · A–Z 0–9 _",
+            < 3 => "최소 3자 이상",
+            _   => Username.All(IsValidUsernameChar) ? "" : "허용된 문자만 입력 가능",
+        };
 
     public bool IsUsernameHintVisible => !string.IsNullOrEmpty(UsernameHint);
 
-    public bool HasUsernameWarning => Username.Length > 0 && !IsUsernameValid;
+    // Locked nickname is fixed + already validated when it was set on the
+    // instance, so it never shows the red "invalid" warning.
+    public bool HasUsernameWarning => !IsOfflineUsernameLocked && Username.Length > 0 && !IsUsernameValid;
 
     public string MojangStatusText => MojangStatus switch
     {
@@ -1200,7 +1567,9 @@ public partial class MainWindowViewModel : ObservableObject, IInstanceCommands, 
         // IsIdle intentionally NOT checked — concurrent launches are allowed.
         // A duplicate of an already-running combo gets caught at click time by
         // the confirm-overlay (LaunchAsync), not by disabling the button.
-        ((IsSignedIn && !IsOfflineMode) || IsUsernameValid)
+        // IsOfflineUsernameLocked counts as a valid identity — the instance's
+        // fixed nickname is used at launch even if the global Username is blank.
+        ((IsSignedIn && !IsOfflineMode) || IsOfflineUsernameLocked || IsUsernameValid)
         && (IsInstanceModeEnabled
             ? SelectedPlayInstance is not null
             : !string.IsNullOrWhiteSpace(SelectedVersion));
@@ -1216,17 +1585,38 @@ public partial class MainWindowViewModel : ObservableObject, IInstanceCommands, 
         OnPropertyChanged(nameof(CanLaunch));
     }
 
-    partial void OnSignedInAccountChanged(MicrosoftAccount? value)
+    partial void OnActiveAccountChanged(MicrosoftAccount? value)
     {
         LaunchCommand.NotifyCanExecuteChanged();
         LaunchInstanceCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(IsSignedIn));
         OnPropertyChanged(nameof(SignedInUsername));
-        OnPropertyChanged(nameof(MicrosoftButtonText));
         OnPropertyChanged(nameof(ShowUsernameInput));
-        OnPropertyChanged(nameof(ShowAccountChip));
+        OnPropertyChanged(nameof(ShowAccountProfile));
+        OnPropertyChanged(nameof(ActiveAccountCard));
         OnPropertyChanged(nameof(CanLaunch));
         OnPropertyChanged(nameof(CanLaunchInstance));
+
+        // Persist the active-account pointer to data/accounts/state.json so the
+        // next launch picks the same identity. Fire-and-forget: a failed write
+        // just means we re-prompt for active on next boot.
+        _ = PersistActiveAccountAsync(value?.Uuid.ToString("N"));
+
+        // Default-mode instance cards follow the active account; refresh their
+        // avatars + display names so swapping active updates every card.
+        foreach (var card in Instances)
+            _ = card.RefreshAccountInfoAsync();
+
+        // AccountSelection cards each show an "현재 활성" badge — re-emit so
+        // the highlight follows the active selection.
+        foreach (var card in SignedInAccountCards)
+            card.NotifyActiveChanged();
+    }
+
+    private async Task PersistActiveAccountAsync(string? uuidHex)
+    {
+        try { await _msAuth.SetActiveAccountIdAsync(uuidHex); }
+        catch { /* best-effort */ }
     }
 
     partial void OnUsernameChanged(string value)
@@ -1244,6 +1634,7 @@ public partial class MainWindowViewModel : ObservableObject, IInstanceCommands, 
         OnPropertyChanged(nameof(UsernameHint));
         OnPropertyChanged(nameof(IsUsernameHintVisible));
         OnPropertyChanged(nameof(HasUsernameWarning));
+        OnPropertyChanged(nameof(PlayUsername));  // keep the Play-view proxy in sync
     }
 
     partial void OnMojangStatusChanged(MojangStatus value)
@@ -1301,8 +1692,13 @@ public partial class MainWindowViewModel : ObservableObject, IInstanceCommands, 
 
     public async Task InitializeAsync()
     {
-        LoadInstances();
+        // Order matters: TryAutoSignInAsync seeds SignedInAccounts + ActiveAccount
+        // so each InstanceItemViewModel's first RefreshAccountInfoAsync resolves
+        // the correct account immediately, instead of painting an offline Steve
+        // face for a fraction of a second before the SignedInAccounts handler
+        // self-heals.
         await TryAutoSignInAsync();
+        LoadInstances();
         await LoadVersionsAsync();
         _ = Task.Run(MonitorStatusLoopAsync);
         _ = Task.Run(DetectBedrockAsync);
@@ -1474,15 +1870,39 @@ public partial class MainWindowViewModel : ObservableObject, IInstanceCommands, 
         }
     }
 
+    /// <summary>
+    /// True when an instance with this name (case-insensitive) already exists.
+    /// <paramref name="excludeId"/> lets the rename path skip the card being
+    /// renamed itself so "no-op rename to same value" isn't rejected.
+    /// </summary>
+    public bool IsInstanceNameTaken(string name, string? excludeId = null)
+    {
+        foreach (var card in Instances)
+        {
+            if (excludeId is not null
+                && string.Equals(card.Model.Id, excludeId, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (string.Equals(card.Model.Name, name, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
     [RelayCommand(CanExecute = nameof(CanCreateInstance))]
     private void CreateInstance()
     {
+        var trimmed = NewInstanceName.Trim();
+        if (IsInstanceNameTaken(trimmed))
+        {
+            SetStatus($"'{trimmed}' 이름의 인스턴스가 이미 있습니다", StatusKind.Error);
+            return;
+        }
         var existingIds = Instances.Select(vm => vm.Model.Id);
         var id = InstanceStorage.GenerateId(NewInstanceName, existingIds);
         var model = new Instance
         {
             Id = id,
-            Name = NewInstanceName.Trim(),
+            Name = trimmed,
             VersionId = NewInstanceVersion!,
             Modloader = NewInstanceModloaderName switch
             {
@@ -1571,6 +1991,11 @@ public partial class MainWindowViewModel : ObservableObject, IInstanceCommands, 
 
     void IInstanceCommands.Rename(Instance instance, string newName)
     {
+        if (IsInstanceNameTaken(newName, excludeId: instance.Id))
+        {
+            SetStatus($"'{newName}' 이름의 인스턴스가 이미 있습니다", StatusKind.Error);
+            return;
+        }
         var card = Instances.FirstOrDefault(vm => vm.Model.Id == instance.Id);
         if (card is null) return;
         card.UpdateModel(card.Model with { Name = newName });
@@ -1688,6 +2113,62 @@ public partial class MainWindowViewModel : ObservableObject, IInstanceCommands, 
             StatusKind.Info);
     }
 
+    void IInstanceCommands.UpdateAccountSettings(
+        Instance instance, InstanceAccountMode mode, string? specificAccountId, string? offlineUsername)
+    {
+        var card = Instances.FirstOrDefault(vm => vm.Model.Id == instance.Id);
+        if (card is null) return;
+        // Normalize: clear unrelated fields when leaving Specific/Offline so
+        // stale ids/usernames don't linger on disk and confuse a future load.
+        card.UpdateModel(card.Model with
+        {
+            AccountMode       = mode,
+            SpecificAccountId = mode == InstanceAccountMode.Specific ? specificAccountId : null,
+            OfflineUsername   = mode == InstanceAccountMode.Offline ? offlineUsername : null,
+        });
+        PersistInstances();
+        _ = card.RefreshAccountInfoAsync();
+    }
+
+    AvatarService IInstanceCommands.AvatarService => _avatarService;
+
+    IReadOnlyList<MicrosoftAccount> IInstanceCommands.AvailableMicrosoftAccounts =>
+        SignedInAccounts.ToList();
+
+    InstanceAvatarInfo IInstanceCommands.ResolveAvatarInfo(Instance instance)
+    {
+        // Same priority order as ResolveAccountAsync but without the async
+        // refresh — the card just needs the display name + UUID for Crafatar.
+        switch (instance.AccountMode)
+        {
+            case InstanceAccountMode.Specific:
+                {
+                    var target = FindByUuid(instance.SpecificAccountId);
+                    if (target is not null)
+                        return new InstanceAvatarInfo(target.Username, target.Uuid);
+                    // Account gone — show Default-style display.
+                    return ResolveDefaultAvatar();
+                }
+            case InstanceAccountMode.Offline:
+                {
+                    var name = !string.IsNullOrWhiteSpace(instance.OfflineUsername)
+                        ? instance.OfflineUsername!
+                        : SafeOfflineUsername();
+                    return new InstanceAvatarInfo(name, null);
+                }
+            case InstanceAccountMode.Default:
+            default:
+                return ResolveDefaultAvatar();
+        }
+    }
+
+    private InstanceAvatarInfo ResolveDefaultAvatar()
+    {
+        if (IsOfflineMode || ActiveAccount is null)
+            return new InstanceAvatarInfo(SafeOfflineUsername(), null);
+        return new InstanceAvatarInfo(ActiveAccount.Username, ActiveAccount.Uuid);
+    }
+
     void IInstanceCommands.Delete(Instance instance)
     {
         var card = Instances.FirstOrDefault(vm => vm.Model.Id == instance.Id);
@@ -1732,14 +2213,26 @@ public partial class MainWindowViewModel : ObservableObject, IInstanceCommands, 
     {
         try
         {
-            var account = await _msAuth.TryLoadAsync();
-            if (account is null) return;
+            // Load every stored account (best-effort refresh inside LoadAllAsync).
+            var accounts = await _msAuth.LoadAllAsync();
+            if (accounts.Count == 0) return;
+
+            // Resolve which one was active on last shutdown. If the pointer is
+            // stale (account file deleted while launcher closed) we silently
+            // fall back to "first available".
+            var activeId = await _msAuth.GetActiveAccountIdAsync();
+            var active = accounts.FirstOrDefault(a =>
+                            string.Equals(a.Uuid.ToString("N"), activeId, StringComparison.OrdinalIgnoreCase))
+                         ?? accounts.First();
+
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                // Remember the account but leave the user on the Welcome page.
-                // When they pick "Java Edition", SelectJavaEdition will short-circuit
-                // straight to JavaPlay because IsSignedIn is already true.
-                SignedInAccount = account;
+                SignedInAccounts.Clear();
+                foreach (var account in accounts) SignedInAccounts.Add(account);
+                // Setting ActiveAccount fires the partial-method handler which
+                // persists state.json — harmless on first load since the value
+                // we just read from disk is what we're about to write back.
+                ActiveAccount = active;
             });
         }
         catch
@@ -1875,6 +2368,18 @@ public partial class MainWindowViewModel : ObservableObject, IInstanceCommands, 
         var launch = new RunningLaunch(runId, displayName);
         await Dispatcher.UIThread.InvokeAsync(() => RunningLaunches.Add(launch));
 
+        // Resolve account up front so a Specific-account fallback toast (the
+        // "지정된 계정을 찾을 수 없어 기본 모드로…" message) gets a moment of
+        // visibility before "준비 중…" replaces it.
+        var (account, fallbackToast) = await ResolveAccountAsync(
+            recordCard?.Model, CancellationToken.None);
+        if (fallbackToast is not null)
+        {
+            SetStatus(fallbackToast, StatusKind.Info);
+            try { await Task.Delay(TimeSpan.FromMilliseconds(1500), CancellationToken.None); }
+            catch (OperationCanceledException) { /* shouldn't fire with a non-cancelable token */ }
+        }
+
         // Status reflects THIS launch; if another runs in parallel its own
         // toast will overwrite — that's fine, the inline progress bar in the
         // toast plus the PLAY-button "N개 실행 중" label keep total state visible.
@@ -1882,9 +2387,6 @@ public partial class MainWindowViewModel : ObservableObject, IInstanceCommands, 
 
         try
         {
-            IAccount account = (!IsOfflineMode && SignedInAccount is not null)
-                ? SignedInAccount
-                : new OfflineAccount(Username);
 
             JvmOverrides? jvmOverrides = null;
             if (recordCard?.Model is { } inst &&
@@ -1936,6 +2438,113 @@ public partial class MainWindowViewModel : ObservableObject, IInstanceCommands, 
         IsSettingsOpen = true;
     }
 
+    // ---- Account resolution -------------------------------------------------
+    //
+    // Precedence (highest first), per project spec:
+    //   1. instance.AccountMode == Specific + matching SignedInAccounts entry
+    //      → that MS account (refreshed if expired)
+    //   2. instance.AccountMode == Specific but the account is gone
+    //      → fall through to (4)/(5) AND emit Q4.A fallback toast
+    //   3. instance.AccountMode == Offline
+    //      → OfflineAccount(instance.OfflineUsername ?? Username)
+    //   4. Default + global IsOfflineMode toggle ON
+    //      → OfflineAccount(Username)
+    //   5. Default + ActiveAccount set
+    //      → that account (refreshed if expired)
+    //   6. Default + no ActiveAccount (or active deleted while running)
+    //      → OfflineAccount(Username) — the universal fallback
+
+    /// <summary>
+    /// Returns the account to launch as, plus an optional toast describing a
+    /// fallback the user should know about (e.g. "specific account deleted, ran
+    /// with default instead").
+    /// </summary>
+    private async Task<(IAccount Account, string? FallbackToast)> ResolveAccountAsync(
+        Instance? instance, CancellationToken ct)
+    {
+        // No instance (quick-launch): always uses the global default path.
+        if (instance is null) return (await ResolveDefaultAsync(ct), null);
+
+        switch (instance.AccountMode)
+        {
+            case InstanceAccountMode.Specific:
+                {
+                    var target = FindByUuid(instance.SpecificAccountId);
+                    if (target is not null)
+                        return (await TryRefreshIfExpiredAsync(target, ct), null);
+
+                    // Q4.A: account is gone — fall back to default mode and tell the user.
+                    var fallback = await ResolveDefaultAsync(ct);
+                    return (fallback, "이 인스턴스에 지정된 Microsoft 계정을 찾을 수 없어 기본 모드로 실행합니다");
+                }
+            case InstanceAccountMode.Offline:
+                {
+                    var name = !string.IsNullOrWhiteSpace(instance.OfflineUsername)
+                        ? instance.OfflineUsername!
+                        : SafeOfflineUsername();
+                    return (new OfflineAccount(name), null);
+                }
+            case InstanceAccountMode.Default:
+            default:
+                return (await ResolveDefaultAsync(ct), null);
+        }
+    }
+
+    /// <summary>Active account if available + signed in; otherwise offline with the typed username.</summary>
+    private async Task<IAccount> ResolveDefaultAsync(CancellationToken ct)
+    {
+        if (IsOfflineMode || ActiveAccount is null)
+            return new OfflineAccount(SafeOfflineUsername());
+        return await TryRefreshIfExpiredAsync(ActiveAccount, ct);
+    }
+
+    /// <summary>
+    /// Refresh a Microsoft account if it's expiring within 2 minutes. On
+    /// success the refreshed instance replaces its slot in
+    /// <see cref="SignedInAccounts"/> + <see cref="ActiveAccount"/> if it was
+    /// the active one. On failure we return the stale account so the launch
+    /// can produce a clear auth error instead of silently swapping to offline.
+    /// </summary>
+    private async Task<MicrosoftAccount> TryRefreshIfExpiredAsync(MicrosoftAccount account, CancellationToken ct)
+    {
+        if (!account.IsExpired(TimeSpan.FromMinutes(2))) return account;
+        try
+        {
+            var fresh = await _msAuth.RefreshSpecificAsync(account.Uuid.ToString("N"), ct);
+            if (fresh is null) return account;
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                var existing = SignedInAccounts.FirstOrDefault(a => a.Uuid == fresh.Uuid);
+                if (existing is not null)
+                {
+                    var idx = SignedInAccounts.IndexOf(existing);
+                    SignedInAccounts[idx] = fresh;
+                }
+                if (ActiveAccount is not null && ActiveAccount.Uuid == fresh.Uuid)
+                    ActiveAccount = fresh;
+            });
+            return fresh;
+        }
+        catch
+        {
+            return account;
+        }
+    }
+
+    private MicrosoftAccount? FindByUuid(string? uuidHex)
+    {
+        if (string.IsNullOrWhiteSpace(uuidHex)) return null;
+        return SignedInAccounts.FirstOrDefault(a =>
+            string.Equals(a.Uuid.ToString("N"), uuidHex, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Username for OfflineAccount when none was supplied explicitly. Validates
+    /// against Mojang's 3-16 char/[A-Z 0-9 _] rules so a blank or garbage
+    /// global Username doesn't blow up the auth chain.
+    /// </summary>
+    private string SafeOfflineUsername() => IsUsernameValid ? Username : "Player";
+
     private static string FriendlyLaunchError(Exception ex)
     {
         var msg = ex.Message ?? "";
@@ -1957,8 +2566,10 @@ public partial class MainWindowViewModel : ObservableObject, IInstanceCommands, 
     [RelayCommand]
     private async Task LoginMicrosoftAsync()
     {
-        // Already signed in (e.g. user hit "back" from Play view) — skip the
-        // WebView modal entirely and just resume their session.
+        // Already signed in AND we're on the legacy single-account button path
+        // (e.g. user hit "back" from Play view) — skip the WebView modal and
+        // just resume. For multi-account "+ 계정 추가" the caller routes through
+        // AddAccountAsync below instead, which always pops the modal.
         if (IsSignedIn)
         {
             IsOfflineMode = false;  // user explicitly chose the MS account path
@@ -1967,15 +2578,30 @@ public partial class MainWindowViewModel : ObservableObject, IInstanceCommands, 
             return;
         }
 
+        await BeginMicrosoftLoginAsync(setActiveOnSuccess: true, navigateToPlayOnSuccess: true);
+    }
+
+    /// <summary>
+    /// "+ 계정 추가" flow used by AccountSelection and Settings → 계정. Always pops
+    /// the WebView modal, regardless of whether other accounts are already
+    /// signed in. The newly-added account becomes active so the user can
+    /// immediately Play with it.
+    /// </summary>
+    [RelayCommand]
+    private Task AddAccountAsync() =>
+        BeginMicrosoftLoginAsync(setActiveOnSuccess: true, navigateToPlayOnSuccess: false);
+
+    private async Task BeginMicrosoftLoginAsync(bool setActiveOnSuccess, bool navigateToPlayOnSuccess)
+    {
         IsAuthenticating = true;
         SetStatus("Microsoft 로그인 창을 여는 중…", StatusKind.Info, autoDismiss: false);
         try
         {
-            var (url, state) = _msAuth.BuildAuthorizationUrl();
+            var (url, session) = _msAuth.BuildAuthorizationUrl();
 
             // WebView2 modal pops up, drives the user through MS sign-in + Xbox
             // consent, and returns the captured redirect URL the moment Microsoft
-            // attempts to navigate to oauth20_desktop.srf?code=...
+            // navigates to the registered nativeclient redirect with ?code=...
             var redirectUrl = await WebViewLoginHelper.ShowAsync(
                 url, MashiroLauncher.Core.Auth.Microsoft.MicrosoftAuthConfig.RedirectUri);
 
@@ -1986,10 +2612,21 @@ public partial class MainWindowViewModel : ObservableObject, IInstanceCommands, 
             }
 
             SetStatus("인증 중…", StatusKind.Info, autoDismiss: false);
-            var account = await _msAuth.CompleteSignInAsync(redirectUrl, state, CancellationToken.None);
-            SignedInAccount = account;
-            IsOfflineMode = false;  // fresh sign-in clears any prior offline override
-            CurrentView = AppView.JavaPlay;
+            var account = await _msAuth.CompleteSignInAsync(redirectUrl, session, CancellationToken.None);
+
+            // Dedup: if this UUID already exists in the collection (e.g. user
+            // re-authed the same account), replace the entry so its fresh
+            // tokens are visible to the rest of the VM.
+            var existing = SignedInAccounts.FirstOrDefault(a => a.Uuid == account.Uuid);
+            if (existing is not null) SignedInAccounts.Remove(existing);
+            SignedInAccounts.Add(account);
+
+            if (setActiveOnSuccess)
+            {
+                IsOfflineMode = false;  // fresh sign-in clears any prior offline override
+                ActiveAccount = account;
+            }
+            if (navigateToPlayOnSuccess) CurrentView = AppView.JavaPlay;
             SetStatus($"{account.Username} 님으로 로그인했습니다.", StatusKind.Success);
         }
         catch (Exception ex)
@@ -2098,13 +2735,79 @@ public partial class MainWindowViewModel : ObservableObject, IInstanceCommands, 
         }
     }
 
-    [RelayCommand]
-    private void SignOut()
+    /// <summary>
+    /// Actual per-account sign-out executor. Removes the account's file from
+    /// disk, drops it from <see cref="SignedInAccounts"/>, and promotes another
+    /// account to active if the signed-out one happened to be active. Falls
+    /// back to AccountSelection when the last account is removed.
+    ///
+    /// Private — call sites go through <see cref="SignOutAccountFromCardAsync"/>
+    /// which pops the confirmation modal first.
+    /// </summary>
+    private async Task ExecuteSignOutAccountAsync(MicrosoftAccount account)
     {
-        _msAuth.SignOut();
-        SignedInAccount = null;
+        var uuid = account.Uuid.ToString("N");
+        var wasActive = ActiveAccount is not null && ActiveAccount.Uuid == account.Uuid;
+        var username = account.Username;
+
+        try { await _msAuth.RemoveAccountAsync(uuid); }
+        catch (Exception ex)
+        {
+            SetStatus($"로그아웃 실패: {ex.Message}", StatusKind.Error);
+            return;
+        }
+
+        // Drop the cached avatar PNG too — if a different player picks up this
+        // UUID later (e.g. shared computer), they'd otherwise see the previous
+        // owner's head until the next disk-cache miss.
+        _avatarService.Invalidate(account.Uuid);
+
+        var existing = SignedInAccounts.FirstOrDefault(a => a.Uuid == account.Uuid);
+        if (existing is not null) SignedInAccounts.Remove(existing);
+
+        if (wasActive)
+        {
+            // Promote another account to active. If the user wants to switch to
+            // a different one they can click that account in the picker.
+            ActiveAccount = SignedInAccounts.FirstOrDefault();
+            if (ActiveAccount is null && CurrentView == AppView.JavaPlay)
+            {
+                // No accounts left — bounce back to the account selection screen
+                // unless the user is on Welcome / Bedrock.
+                CurrentView = AppView.AccountSelection;
+            }
+        }
+        SetStatus($"'{username}' 계정에서 로그아웃되었습니다", StatusKind.Info);
+    }
+
+    /// <summary>
+    /// "전체 로그아웃" entry point in Settings → 계정. Pops the confirmation
+    /// overlay instead of signing out immediately. The actual clear happens in
+    /// <see cref="ExecuteSignOutAll"/> when the user clicks 로그아웃.
+    /// </summary>
+    [RelayCommand]
+    private void SignOutAll()
+    {
+        if (SignedInAccounts.Count == 0) return;
+        var message = SignedInAccounts.Count == 1
+            ? $"'{SignedInAccounts[0].Username}' 계정에서 정말로 로그아웃 하시겠습니까?"
+            : $"저장된 {SignedInAccounts.Count}개 계정 모두에서 정말로 로그아웃 하시겠습니까?";
+        PendingSignOut = new PendingSignOutRequest(
+            Specific: null, IsAll: true, Message: message);
+    }
+
+    /// <summary>Actual all-accounts sign-out executor. Called by <see cref="ConfirmSignOutAsync"/>.</summary>
+    private void ExecuteSignOutAll()
+    {
+        // Drop each account's cached avatar PNG before we lose the UUID list.
+        foreach (var account in SignedInAccounts)
+            _avatarService.Invalidate(account.Uuid);
+
+        _msAuth.SignOutAll();
+        SignedInAccounts.Clear();
+        ActiveAccount = null;
         CurrentView = AppView.AccountSelection;
-        SetStatus("로그아웃됨", StatusKind.Info);
+        SetStatus("모든 계정에서 로그아웃되었습니다", StatusKind.Info);
     }
 
     [RelayCommand] private void OpenSettings() => IsSettingsOpen = true;
@@ -2138,8 +2841,39 @@ public partial class MainWindowViewModel : ObservableObject, IInstanceCommands, 
         ClearStatus();
     }
 
+    /// <summary>
+    /// Bound to the "계정 선택" button on the Java Edition play view — lets the
+    /// user jump back to the account list without losing edition context.
+    /// </summary>
+    [RelayCommand]
+    private void OpenAccountSelection()
+    {
+        CurrentView = AppView.AccountSelection;
+        ClearStatus();
+    }
+
     [RelayCommand]
     private void ChooseOffline()
+    {
+        var (inst, bound, offlinePinned) = GetSelectedInstanceFixedIdentity();
+        // Going offline only conflicts with a Specific-bound instance (it'd still
+        // launch with its MS account). An offline-pinned instance already matches,
+        // so no warning there.
+        if (inst is not null && !offlinePinned)
+        {
+            _onAccountConflictConfirmed = ApplyOfflineSelection;
+            PendingAccountConflict = new AccountConflictRequest(
+                inst.Name,
+                BoundIsOffline: false, BoundAccountName: bound!.Username,
+                SwitchIsOffline: true, NewAccountName: null);
+            return;
+        }
+        ApplyOfflineSelection();
+    }
+
+    /// <summary>Force the offline path + jump to Play. Shared by the no-conflict
+    /// path and the "계속" branch of the conflict overlay.</summary>
+    private void ApplyOfflineSelection()
     {
         // Force offline path even if the user is signed into Microsoft —
         // the launch will use OfflineAccount with the typed username.

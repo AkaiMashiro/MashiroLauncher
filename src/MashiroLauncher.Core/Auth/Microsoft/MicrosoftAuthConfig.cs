@@ -2,25 +2,23 @@ namespace MashiroLauncher.Core.Auth.Microsoft;
 
 public static class MicrosoftAuthConfig
 {
-    // Mojang's well-known public Minecraft client id, registered with Microsoft's
-    // consumer Live OAuth service (login.live.com). Used by the official Minecraft
-    // Launcher itself. Microsoft tolerates third-party use; the OAuth consent
-    // screen displays "Minecraft" as the requesting app.
-    //
-    // Note: this id is NOT registered in Azure AD ("Microsoft Accounts" tenant),
-    // so the Azure AD endpoints (login.microsoftonline.com) and device-code flow
-    // both fail. We use Live OAuth Authorization Code Flow with the OOB redirect
-    // that's registered for this id.
-    public const string ClientId = "00000000402b5328";
+    // Mashiro Launcher's own Azure AD application id, approved by Mojang for the
+    // Minecraft authentication APIs. Because it's a custom registration (not the
+    // legacy public Minecraft id), we use the Microsoft identity platform v2.0
+    // endpoints — NOT the old login.live.com Live OAuth service.
+    public const string ClientId = "8a0d48af-5f14-4895-a247-dc2eb93259a0";
 
-    // Live OAuth endpoints
-    public const string AuthorizeUrl = "https://login.live.com/oauth20_authorize.srf";
-    public const string TokenUrl = "https://login.live.com/oauth20_token.srf";
+    // Microsoft identity platform v2.0 endpoints, "consumers" tenant — Minecraft
+    // accounts are personal Microsoft accounts, so we target /consumers/ rather
+    // than /common/ to keep the flow MSA-only.
+    public const string AuthorizeUrl = "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize";
+    public const string TokenUrl = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token";
 
-    // Out-of-band redirect — Microsoft shows a near-blank "success" page whose
-    // URL contains ?code=... The user copies that URL back into our launcher
-    // and we extract the code from it.
-    public const string RedirectUri = "https://login.live.com/oauth20_desktop.srf";
+    // Redirect URI registered under "Mobile and desktop applications" in the
+    // Azure app's Authentication blade. The embedded WebView intercepts the
+    // navigation to this URL (its query carries ?code=...). It renders a blank
+    // page, so the user never actually sees it.
+    public const string RedirectUri = "https://login.microsoftonline.com/common/oauth2/nativeclient";
 
     public const string Scope = "XboxLive.signin offline_access";
 

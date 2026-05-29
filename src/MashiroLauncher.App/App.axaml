@@ -103,6 +103,128 @@
             <Setter Property="Margin" Value="-3,0,0,0" />
         </Style>
 
+        <!-- Click-to-edit instance name: transparent shell so the name reads
+             like normal heading text, with a hover halo + hand cursor to hint
+             at the click target. The actual TextBlock content lives in the
+             Button's Content (set inline in MainWindow.axaml). -->
+        <Style Selector="Button.name-edit">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="4,2" />
+            <Setter Property="Margin" Value="-4,-2,0,-2" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.name-edit:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#1AFFFFFF" />
+        </Style>
+        <Style Selector="Button.name-edit:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="#22FFFFFF" />
+        </Style>
+
+        <!-- Per-account card click target on the AccountSelection screen.
+             Transparent so the surrounding Border carries the visible card;
+             the hover halo is subtle so the row reads as "clickable" without
+             stealing visual weight from the username text. -->
+        <Style Selector="Button.account-row">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.account-row:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#10FFFFFF" />
+            <Setter Property="CornerRadius" Value="4" />
+        </Style>
+
+        <!-- Tiny ⇄ icon button next to the avatar+username row on each
+             instance card. Click opens the account-change sub-form. Padding /
+             margin are tight on purpose so the icon sits close to the username
+             (the user explicitly asked for shorter gap). -->
+        <Style Selector="Button.edit-icon">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="#80FFFFFF" />
+            <Setter Property="Padding" Value="3,1" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="CornerRadius" Value="3" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Button.edit-icon:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#1AFFFFFF" />
+        </Style>
+        <Style Selector="Button.edit-icon:pointerover">
+            <Setter Property="Foreground" Value="#FFFFFF" />
+        </Style>
+
+        <!-- Card-style ListBox for the per-instance account picker (Settings →
+             인스턴스 → 고급). Each ListBoxItem renders as one of the
+             AccountSelection-style cards (avatar + label) and clicking selects
+             it (radio semantics — single selection only). The default
+             FluentTheme highlight is overridden to a green-tinted accent so
+             selected rows read as "this is the chosen one" rather than the
+             generic blue text-list selection. -->
+        <Style Selector="ListBox.choices">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+        </Style>
+        <Style Selector="ListBox.choices ListBoxItem">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="0,0,0,6" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="ListBox.choices ListBoxItem /template/ ContentPresenter">
+            <Setter Property="Background" Value="#1F1F1F" />
+            <Setter Property="BorderBrush" Value="#28FFFFFF" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="10" />
+        </Style>
+        <Style Selector="ListBox.choices ListBoxItem:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#252525" />
+        </Style>
+        <Style Selector="ListBox.choices ListBoxItem:selected /template/ ContentPresenter">
+            <Setter Property="Background" Value="#152D1A" />
+            <Setter Property="BorderBrush" Value="#5BC54E" />
+        </Style>
+        <!-- Avalonia 12 / FluentTheme paints :selected:focus with a separate
+             accent — override so keyboard focus inside the picker doesn't
+             reintroduce the blue tint we just removed. -->
+        <Style Selector="ListBox.choices ListBoxItem:selected:focus /template/ ContentPresenter">
+            <Setter Property="Background" Value="#152D1A" />
+            <Setter Property="BorderBrush" Value="#5BC54E" />
+        </Style>
+        <Style Selector="ListBox.choices ListBoxItem:selected:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#1A3622" />
+            <Setter Property="BorderBrush" Value="#5BC54E" />
+        </Style>
+
+        <!-- Inline name editor: render with the same typography as the static
+             heading so swapping in feels like the text just "lit up" rather
+             than a whole new control popping in. The box hugs the current
+             text length — MinWidth is just enough that an empty state still
+             shows a small visual presence; MaxWidth caps long names so the
+             card layout stays predictable. -->
+        <Style Selector="TextBox.inline-name">
+            <Setter Property="Background" Value="#22FFFFFF" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="BorderBrush" Value="#60FFFFFF" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Padding" Value="4,2" />
+            <Setter Property="Margin" Value="-4,-2,0,-2" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="MinWidth" Value="40" />
+            <Setter Property="MaxWidth" Value="200" />
+            <!-- Override FluentTheme's 32px TextBox MinHeight so the box hugs
+                 the font height instead of leaving a tall empty area below. -->
+            <Setter Property="MinHeight" Value="0" />
+        </Style>
+
         <!-- Indeterminate progress strip for mod install buttons. Used inline
              alongside "설치 중..." text. ProgressBar's built-in indeterminate
              animation is animator-safe across Avalonia 12 versions, unlike
@@ -259,7 +381,13 @@
             <Setter Property="Foreground" Value="White" />
             <Setter Property="FontSize" Value="22" />
             <Setter Property="FontWeight" Value="Light" />
-            <Setter Property="Margin" Value="0,0,0,14" />
+            <!-- Top 18 nudges every settings section title down off the content
+                 area's top edge. Applied here (a reliably-rendered child margin)
+                 rather than on the ScrollViewer's content StackPanel, whose top
+                 margin Avalonia's ScrollContentPresenter doesn't honor. The
+                 Instances title carries Margin="0,18,0,0" locally to match (it
+                 lives in a Grid with the action buttons, not as a bare title). -->
+            <Setter Property="Margin" Value="0,18,0,14" />
         </Style>
 
         <Style Selector="Border.comingSoon">

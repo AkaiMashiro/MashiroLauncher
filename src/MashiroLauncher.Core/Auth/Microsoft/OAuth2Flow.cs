@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Web;
@@ -13,41 +14,48 @@ namespace MashiroLauncher.Core.Auth.Microsoft;
 /// </summary>
 public sealed record MsTokens(string AccessToken, string? RefreshToken, DateTimeOffset ExpiresAt);
 
+/// <summary>
+/// Per-sign-in secrets the authorize step generates and the token-exchange step
+/// must echo back: the CSRF <see cref="State"/> and the PKCE
+/// <see cref="CodeVerifier"/>. The caller holds this between opening the
+/// authorize URL and completing sign-in.
+/// </summary>
+public sealed record PkceSession(string State, string CodeVerifier);
+
 public class OAuth2AuthException(string message) : Exception(message);
 
 /// <summary>
-/// Microsoft Live OAuth Authorization Code Flow with out-of-band (OOB) redirect.
+/// Microsoft identity platform (v2.0) Authorization Code Flow with PKCE, against
+/// the /consumers/ tenant (personal Microsoft accounts — what Minecraft uses).
 ///
-/// Why OOB instead of PKCE+loopback: the well-known public Minecraft client id
-/// (<see cref="MicrosoftAuthConfig.ClientId"/>) is registered only at
-/// login.live.com and only with the OOB redirect URI. We can't add a loopback
-/// URI to an id we don't own, and PKCE/device-code aren't supported here.
+/// We use our own Azure AD application id (<see cref="MicrosoftAuthConfig.ClientId"/>),
+/// approved by Mojang. As a public desktop client it has no secret, so PKCE
+/// (S256) protects the code exchange.
 ///
 /// Flow:
-///   1. Caller invokes <see cref="BuildAuthorizationUrl"/> and opens the URL
-///      in the user's browser.
-///   2. User signs in to Microsoft and approves the Xbox Live scope.
-///   3. Microsoft redirects to login.live.com/oauth20_desktop.srf — a
-///      near-blank page whose URL contains ?code=...
-///   4. User copies that URL into our launcher; we call
-///      <see cref="ExchangeCallbackUrlAsync"/> to extract the code (verifying
-///      the state) and trade it for an MS access token.
+///   1. <see cref="BuildAuthorizationUrl"/> mints a state + PKCE verifier and
+///      returns the authorize URL plus the <see cref="PkceSession"/> to keep.
+///   2. The embedded WebView drives sign-in + Xbox consent, then Microsoft
+///      redirects to the registered nativeclient URI with ?code=...
+///   3. The WebView intercepts that navigation and hands the URL to
+///      <see cref="ExchangeCallbackUrlAsync"/>, which verifies the state and
+///      trades the code (+ verifier) for an MS access token.
 /// </summary>
 public sealed class OAuth2Flow(HttpClient http)
 {
     /// <summary>
-    /// Builds the authorize URL the user should open in their browser.
-    /// Returns the URL plus the random state we expect to see echoed back
-    /// in the redirect.
+    /// Builds the authorize URL to load in the WebView. Returns the URL plus the
+    /// <see cref="PkceSession"/> (state + code verifier) the caller must pass
+    /// back to <see cref="ExchangeCallbackUrlAsync"/>.
     /// </summary>
-    public (string Url, string State) BuildAuthorizationUrl()
+    public (string Url, PkceSession Session) BuildAuthorizationUrl()
     {
         var state = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
-        // prompt=select_account forces the account-picker every time. Without
-        // it, Microsoft tries silent SSO and — when the user has already
-        // signed into another Minecraft client — falls into a cleanup flow
-        // that redirects back to oauth20_desktop.srf?removed=true with no
-        // authorization code. select_account avoids that branch entirely.
+        var verifier = GenerateCodeVerifier();
+        var challenge = CodeChallengeFor(verifier);
+
+        // prompt=select_account forces the account-picker every time so a user
+        // with multiple Microsoft accounts can choose which one to add.
         var url =
             MicrosoftAuthConfig.AuthorizeUrl
             + "?client_id=" + MicrosoftAuthConfig.ClientId
@@ -55,16 +63,19 @@ public sealed class OAuth2Flow(HttpClient http)
             + "&redirect_uri=" + Uri.EscapeDataString(MicrosoftAuthConfig.RedirectUri)
             + "&scope=" + Uri.EscapeDataString(MicrosoftAuthConfig.Scope)
             + "&state=" + state
+            + "&code_challenge=" + challenge
+            + "&code_challenge_method=S256"
             + "&prompt=select_account";
-        return (url, state);
+        return (url, new PkceSession(state, verifier));
     }
 
     /// <summary>
-    /// User pasted the full redirect URL back into the launcher. Pull out the
-    /// authorization code (verifying state) and trade it for tokens.
+    /// The WebView intercepted the redirect to the nativeclient URI. Pull out the
+    /// authorization code (verifying the state matches the session) and trade it
+    /// — with the PKCE verifier — for tokens.
     /// </summary>
     public async Task<MsTokens> ExchangeCallbackUrlAsync(
-        string callbackUrl, string expectedState, CancellationToken ct)
+        string callbackUrl, PkceSession session, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(callbackUrl))
             throw new OAuth2AuthException("주소(URL)가 비어 있습니다.");
@@ -79,16 +90,11 @@ public sealed class OAuth2Flow(HttpClient http)
         if (!string.IsNullOrEmpty(error))
             throw new OAuth2AuthException($"OAuth2 오류: {error} - {query["error_description"]}");
 
-        // Microsoft cleanup redirect — no code returned. User needs to start over.
-        if (query["removed"] == "true")
-            throw new OAuth2AuthException("Microsoft 세션이 정리되었습니다. '취소' 후 'Microsoft로 로그인'을 한 번 더 눌러주세요.");
-
         var code = query["code"];
         if (string.IsNullOrEmpty(code))
-            throw new OAuth2AuthException("주소에 인증 코드(code)가 없습니다. 로그인 후 빈 페이지가 뜨면 그 페이지의 주소를 복사해 주세요.");
+            throw new OAuth2AuthException("인증 코드(code)를 받지 못했습니다. 처음부터 다시 시도해 주세요.");
 
-        var state = query["state"];
-        if (state != expectedState)
+        if (query["state"] != session.State)
             throw new OAuth2AuthException("State 불일치. 보안을 위해 처음부터 다시 시도해주세요.");
 
         return await PostTokenAsync(new Dictionary<string, string>
@@ -98,6 +104,7 @@ public sealed class OAuth2Flow(HttpClient http)
             ["code"] = code,
             ["redirect_uri"] = MicrosoftAuthConfig.RedirectUri,
             ["scope"] = MicrosoftAuthConfig.Scope,
+            ["code_verifier"] = session.CodeVerifier,
         }, ct);
     }
 
@@ -128,6 +135,20 @@ public sealed class OAuth2Flow(HttpClient http)
             dto.RefreshToken,  // may be null on refresh responses — caller preserves the old one
             DateTimeOffset.UtcNow.AddSeconds(dto.ExpiresIn));
     }
+
+    // ---- PKCE helpers -------------------------------------------------------
+
+    /// <summary>32 random bytes → 43-char base64url verifier (within the 43–128 spec range).</summary>
+    private static string GenerateCodeVerifier() =>
+        Base64Url(RandomNumberGenerator.GetBytes(32));
+
+    /// <summary>S256 challenge: base64url(SHA-256(ASCII(verifier))).</summary>
+    private static string CodeChallengeFor(string verifier) =>
+        Base64Url(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
+
+    /// <summary>URL-safe, unpadded Base64 (RFC 7636 / 4648 §5).</summary>
+    private static string Base64Url(byte[] bytes) =>
+        Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
     private sealed record TokenResponse(
         [property: JsonPropertyName("access_token")] string AccessToken,

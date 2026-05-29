@@ -32,6 +32,7 @@ public partial class App : Application
             var launchService = new UiLaunchService(downloader);
             var msAuthService = new MicrosoftAuthService(http);
             var updateService = new UpdateService(http);
+            var avatarService = new AvatarService(http);
 
             var window = new MainWindow();
             var viewModel = new MainWindowViewModel(
@@ -42,6 +43,7 @@ public partial class App : Application
                 launchService,
                 msAuthService,
                 updateService,
+                avatarService,
                 pickImageAsync: () => PickImageAsync(window),
                 pickModFilesAsync: () => PickJarFilesAsync(window),
                 pickMrpackAsync: () => PickMrpackAsync(window),

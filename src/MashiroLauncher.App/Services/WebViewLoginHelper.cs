@@ -6,11 +6,11 @@ using Microsoft.Web.WebView2.WinForms;
 namespace MashiroLauncher.App.Services;
 
 /// <summary>
-/// Pops up an embedded WebView2 window that drives the Microsoft Live OAuth
-/// authorize URL and intercepts the OOB redirect the instant Microsoft tries
-/// to navigate to it — *before* the page's own JavaScript can self-redirect
-/// to ?removed=true. The intercepted URL is returned (containing ?code=) so
-/// the caller can complete the Xbox/XSTS/Minecraft chain.
+/// Pops up an embedded WebView2 window that drives the Microsoft v2.0 authorize
+/// URL and intercepts the navigation to the registered redirect URI (the
+/// nativeclient page) the instant Microsoft tries to reach it. The intercepted
+/// URL is returned (containing ?code=) so the caller can exchange it — with the
+/// PKCE verifier — and complete the Xbox/XSTS/Minecraft chain.
 ///
 /// Returns null if the user closes the window without completing sign-in.
 /// </summary>
@@ -47,9 +47,9 @@ internal static class WebViewLoginHelper
 
                 webView.NavigationStarting += (_, e) =>
                 {
-                    // The very first redirect to oauth20_desktop.srf carries
-                    // the authorization code (or an error). Grab it and bail
-                    // before the page renders + self-navigates.
+                    // The redirect to the nativeclient URI carries the
+                    // authorization code (or an error) in its query. Grab it and
+                    // cancel the navigation before the blank page even renders.
                     if (e.Uri.StartsWith(redirectUriPrefix, StringComparison.OrdinalIgnoreCase))
                     {
                         intercepted = true;

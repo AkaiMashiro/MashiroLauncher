@@ -509,12 +509,13 @@ $RECYCLE.BIN/
 # UIA-driven settings captures (dev artifacts)
 /screenshots/
 
-# Font/asset source archives (already extracted into src/Launcher.App/Assets/)
+# Font/asset source archives (already extracted into src/MashiroLauncher.App/Assets/)
 /*.zip
 
 # Loose artwork originals at repo root (only the in-app assets under src/ are tracked)
 /CreeperFaceArtwork.png
 /Fox_artwork.png
+/AllayPixel.png
 
 # Anything that looks like an env / secret file
 *.env

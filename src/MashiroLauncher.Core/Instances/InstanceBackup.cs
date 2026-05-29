@@ -14,6 +14,15 @@ public class InstanceBackupException(string message) : Exception(message);
 /// the <see cref="Instance"/> faithfully. Id is intentionally NOT stored —
 /// the importer assigns a fresh folder-safe id to avoid colliding with
 /// whatever the user already has.
+///
+/// Schema versions:
+/// <list type="bullet">
+///   <item><description>v1: original (JVM overrides only).</description></item>
+///   <item><description>v2: adds per-instance account fields (<see cref="AccountMode"/>,
+///   <see cref="SpecificAccountId"/>, <see cref="OfflineUsername"/>). Old launchers
+///   ignore the extra keys; new launchers reading a v1 manifest default the
+///   fields to <see cref="InstanceAccountMode.Default"/> + null.</description></item>
+/// </list>
 /// </summary>
 public sealed record InstanceBackupManifest(
     [property: JsonPropertyName("name")] string Name,
@@ -25,7 +34,11 @@ public sealed record InstanceBackupManifest(
     [property: JsonPropertyName("customJvmArgs")] string? CustomJvmArgs,
     [property: JsonPropertyName("createdAt")] DateTimeOffset CreatedAt,
     [property: JsonPropertyName("exportedAt")] DateTimeOffset ExportedAt,
-    [property: JsonPropertyName("schemaVersion")] int SchemaVersion = 1);
+    [property: JsonConverter(typeof(JsonStringEnumConverter))]
+    [property: JsonPropertyName("accountMode")] InstanceAccountMode AccountMode = InstanceAccountMode.Default,
+    [property: JsonPropertyName("specificAccountId")] string? SpecificAccountId = null,
+    [property: JsonPropertyName("offlineUsername")] string? OfflineUsername = null,
+    [property: JsonPropertyName("schemaVersion")] int SchemaVersion = 2);
 
 /// <summary>
 /// Zips an entire instance directory (including the game/ subfolder with worlds,
@@ -70,7 +83,10 @@ public sealed class InstanceBackup
                 MaxMemoryMb: instance.MaxMemoryMb,
                 CustomJvmArgs: instance.CustomJvmArgs,
                 CreatedAt: instance.CreatedAt,
-                ExportedAt: DateTimeOffset.UtcNow);
+                ExportedAt: DateTimeOffset.UtcNow,
+                AccountMode: instance.AccountMode,
+                SpecificAccountId: instance.SpecificAccountId,
+                OfflineUsername: instance.OfflineUsername);
             var manifestEntry = zip.CreateEntry(ManifestEntryName, CompressionLevel.Optimal);
             using (var stream = manifestEntry.Open())
             using (var writer = new StreamWriter(stream, Encoding.UTF8))
@@ -140,6 +156,8 @@ public sealed class InstanceBackup
             }
 
             // ---- 3. Build the Instance — fresh id + fresh CreatedAt ----
+            // Account fields come from the v2 manifest; v1 manifests default to
+            // AccountMode.Default + null companions via the record defaults.
             return new Instance
             {
                 Id = newId,
@@ -151,6 +169,9 @@ public sealed class InstanceBackup
                 MinMemoryMb = manifest.MinMemoryMb,
                 MaxMemoryMb = manifest.MaxMemoryMb,
                 CustomJvmArgs = manifest.CustomJvmArgs,
+                AccountMode = manifest.AccountMode,
+                SpecificAccountId = manifest.SpecificAccountId,
+                OfflineUsername = manifest.OfflineUsername,
             };
         }, ct);
     }

@@ -6,7 +6,11 @@ public sealed record LauncherSettings(
     int MinMemoryMb = 512,
     int MaxMemoryMb = 4096,
     string CustomJvmArgs = "",
-    bool UseInstanceMode = false);
+    bool UseInstanceMode = false,
+    // Controls the visibility of the per-instance "고급" button on each card
+    // in Settings → 인스턴스. Off by default so casual users don't see JVM
+    // tweaks unless they explicitly enable them in Settings → 고급.
+    bool ShowInstanceAdvancedButton = false);
 
 public sealed class SettingsStorage
 {

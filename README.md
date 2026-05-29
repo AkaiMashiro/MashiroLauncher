@@ -33,9 +33,9 @@ dotnet test tests/MashiroLauncher.Core.Tests/MashiroLauncher.Core.Tests.csproj
 
 ## 인증과 보안
 
-Microsoft 로그인은 공식 마인크래프트 클라이언트 ID(`00000000402b5328`)를 사용하고, 비밀번호는 Microsoft의 공식 로그인 페이지에 입력하기 때문에 런처가 직접 보지 못합니다.
+Microsoft 로그인은 Mojang 승인을 받은 Mashiro Launcher 자체 Azure 앱(Microsoft identity platform v2.0 + PKCE)을 사용하고, 비밀번호는 Microsoft의 공식 로그인 페이지에 입력하기 때문에 런처가 직접 보지 못합니다.
 
-로그인 결과로 받은 토큰(refresh token + Minecraft access token)만 `data/accounts/microsoft.json`에 저장되며, Windows에서는 **DPAPI (CurrentUser)** 로 암호화됩니다. 다른 사용자 계정이나 다른 PC에서는 복호화할 수 없습니다. 언제든 계정 로그아웃으로 파일을 삭제할 수 있습니다.
+로그인 결과로 받은 토큰(refresh token + Minecraft access token)만 계정별로 `data/accounts/{uuid}.json`에 저장되며, Windows에서는 **DPAPI (CurrentUser)** 로 암호화됩니다. 다른 사용자 계정이나 다른 PC에서는 복호화할 수 없습니다. 언제든 계정 로그아웃으로 파일을 삭제할 수 있습니다.
 
 ## 라이선스
 

@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:MashiroLauncher.App.ViewModels"
+        xmlns:auth="using:MashiroLauncher.Core.Auth"
         xmlns:controls="using:MashiroLauncher.App.Controls"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -11,7 +12,8 @@
         Icon="avares://MashiroLauncher/Assets/AppIcon.png"
         Width="1080" Height="660"
         CanResize="False"
-        Background="#181818">
+        Background="#181818"
+        PointerPressed="Window_PointerPressed">
 
     <Grid>
         <!-- Background image -->
@@ -100,20 +102,82 @@
             </StackPanel>
         </Border>
 
-        <!-- View: Account selection (Java path) -->
+        <!-- View: Account selection (Java path).
+             Multi-account list when ≥1 MS account is signed in, plus "+ 계정 추가"
+             and "오프라인으로 플레이" actions underneath. -->
         <Border IsVisible="{Binding IsAccountView}"
                 HorizontalAlignment="Center" VerticalAlignment="Center"
-                Width="440"
+                Width="460"
                 Background="#A8161616" CornerRadius="14"
                 BoxShadow="0 8 32 0 #80000000"
                 Padding="28">
-            <StackPanel Spacing="16">
+            <StackPanel Spacing="14">
                 <TextBlock Text="계정 선택" Foreground="White"
                            FontSize="16" FontWeight="Light"
                            HorizontalAlignment="Center" Margin="0,0,0,4" />
 
+                <!-- Signed-in account cards. Click anywhere on the card to make
+                     it active and jump to Play; ⎋ on the right signs that
+                     account out individually. Wrapped in a ScrollViewer with
+                     MaxHeight=380 so 7+ accounts get a scrollbar instead of
+                     overflowing the fixed-size window (660px tall, can't
+                     resize). The title above and the "Microsoft 계정 추가" +
+                     "오프라인으로 플레이" buttons below always stay visible. -->
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled"
+                              MaxHeight="380"
+                              IsVisible="{Binding HasAnyAccount}">
+                    <ItemsControl ItemsSource="{Binding SignedInAccountCards}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Spacing="8" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:SignedInAccountCardViewModel">
+                                <Border Background="#1F1F1F"
+                                        BorderBrush="#28FFFFFF" BorderThickness="1"
+                                        CornerRadius="8" Padding="10">
+                                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                                        <Border Grid.Column="0" Width="28" Height="28"
+                                                CornerRadius="3" ClipToBounds="True"
+                                                Background="#28FFFFFF"
+                                                VerticalAlignment="Center">
+                                            <Image Source="{Binding Avatar}"
+                                                   Stretch="UniformToFill"
+                                                   RenderOptions.BitmapInterpolationMode="None" />
+                                        </Border>
+                                        <Button Grid.Column="1"
+                                                Classes="account-row"
+                                                Command="{Binding SelectCommand}"
+                                                HorizontalContentAlignment="Left"
+                                                HorizontalAlignment="Stretch">
+                                            <StackPanel Spacing="2" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding Username}"
+                                                           Foreground="White" FontSize="14"
+                                                           FontWeight="SemiBold" />
+                                                <TextBlock Text="현재 활성"
+                                                           Foreground="#5BC54E" FontSize="10"
+                                                           IsVisible="{Binding IsActive}" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Grid.Column="2" Classes="icon"
+                                                Command="{Binding SignOutCommand}"
+                                                ToolTip.Tip="이 계정 로그아웃"
+                                                Width="28" Height="28" FontSize="12"
+                                                VerticalAlignment="Center"
+                                                Content="⎋" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+
+                <!-- + Microsoft account. The label flips from "추가" to the
+                     primary "Microsoft로 로그인" when no accounts exist yet. -->
                 <Button Classes="account"
-                        Command="{Binding LoginMicrosoftCommand}"
+                        Command="{Binding AddAccountCommand}"
                         IsEnabled="{Binding !IsAuthenticating}"
                         HorizontalAlignment="Stretch">
                     <StackPanel Orientation="Horizontal" Spacing="12"
@@ -126,7 +190,7 @@
                             <Rectangle Grid.Column="0" Grid.Row="1" Fill="#00A4EF" />
                             <Rectangle Grid.Column="1" Grid.Row="1" Fill="#FFB900" />
                         </Grid>
-                        <TextBlock Text="{Binding MicrosoftButtonText}"
+                        <TextBlock Text="{Binding AddAccountButtonText}"
                                    VerticalAlignment="Center"
                                    FontSize="14"
                                    Foreground="White" />
@@ -168,8 +232,15 @@
                      being signed in — see IsOfflineMode flag in the VM. -->
                 <StackPanel Spacing="4" IsVisible="{Binding ShowUsernameInput}">
                     <TextBlock Classes="label" Text="USERNAME" />
+                    <!-- When the selected instance pins an offline nickname the field
+                         is fully inert: IsReadOnly blocks edits, and Focusable +
+                         IsHitTestVisible=False make it unclickable / unfocusable so
+                         the fixed nickname truly can't be touched. -->
                     <controls:UsernameTextBox Name="UsernameBox"
-                             Text="{Binding Username, Mode=TwoWay}"
+                             Text="{Binding PlayUsername, Mode=TwoWay}"
+                             IsReadOnly="{Binding IsOfflineUsernameLocked}"
+                             Focusable="{Binding !IsOfflineUsernameLocked}"
+                             IsHitTestVisible="{Binding !IsOfflineUsernameLocked}"
                              PlaceholderText="Player"
                              MaxLength="16"
                              Classes.invalid="{Binding HasUsernameWarning}">
@@ -183,28 +254,41 @@
                                IsVisible="{Binding IsUsernameHintVisible}" />
                 </StackPanel>
 
-                <!-- Signed-in mode: Microsoft account chip -->
-                <StackPanel Spacing="4" IsVisible="{Binding ShowAccountChip}">
-                    <TextBlock Classes="label" Text="MICROSOFT 계정" />
-                    <Border Background="#28FFFFFF" BorderBrush="#40FFFFFF" BorderThickness="1"
-                            CornerRadius="6" Padding="10,8">
-                        <Grid ColumnDefinitions="Auto,*,Auto">
-                            <Grid Grid.Column="0" Width="14" Height="14" Margin="0,0,10,0"
-                                  ColumnDefinitions="*,*" RowDefinitions="*,*"
-                                  ColumnSpacing="1.5" RowSpacing="1.5"
-                                  VerticalAlignment="Center">
-                                <Rectangle Grid.Column="0" Grid.Row="0" Fill="#F25022" />
-                                <Rectangle Grid.Column="1" Grid.Row="0" Fill="#7FBA00" />
-                                <Rectangle Grid.Column="0" Grid.Row="1" Fill="#00A4EF" />
-                                <Rectangle Grid.Column="1" Grid.Row="1" Fill="#FFB900" />
-                            </Grid>
-                            <TextBlock Grid.Column="1" Text="{Binding SignedInUsername}"
-                                       VerticalAlignment="Center"
-                                       Foreground="White" FontSize="14" />
-                            <Button Grid.Column="2" Classes="icon"
-                                    Command="{Binding SignOutCommand}"
-                                    ToolTip.Tip="로그아웃"
-                                    Width="24" Height="24" FontSize="12"
+                <!-- Active account profile box: same shape as the cards on the
+                     "계정 선택" screen, so the user always sees who's about to
+                     launch. The inline "계정 변경" button to the left of ⎋
+                     jumps back to AccountSelection without claiming a full row
+                     of vertical space. Hidden in forced-offline mode (the
+                     username TextBox above is the source of truth then). -->
+                <StackPanel Spacing="6" IsVisible="{Binding ShowAccountProfile}">
+                    <TextBlock Classes="label" Text="Microsoft 계정" />
+                    <Border Background="#1F1F1F"
+                            BorderBrush="#28FFFFFF" BorderThickness="1"
+                            CornerRadius="8" Padding="10">
+                        <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
+                            <Border Grid.Column="0" Width="28" Height="28"
+                                    CornerRadius="3" ClipToBounds="True"
+                                    Background="#28FFFFFF"
+                                    VerticalAlignment="Center">
+                                <Image Source="{Binding ActiveAccountCard.Avatar}"
+                                       Stretch="UniformToFill"
+                                       RenderOptions.BitmapInterpolationMode="None" />
+                            </Border>
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding ActiveAccountCard.Username}"
+                                       Foreground="White" FontSize="14"
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Center" />
+                            <Button Grid.Column="2" Classes="ghost"
+                                    Command="{Binding OpenAccountSelectionCommand}"
+                                    VerticalAlignment="Center"
+                                    FontSize="11" Padding="8,3"
+                                    Content="계정 변경" />
+                            <Button Grid.Column="3" Classes="icon"
+                                    Command="{Binding ActiveAccountCard.SignOutCommand}"
+                                    ToolTip.Tip="이 계정 로그아웃"
+                                    Width="28" Height="28" FontSize="12"
+                                    VerticalAlignment="Center"
                                     Content="⎋" />
                         </Grid>
                     </Border>
@@ -296,7 +380,12 @@
             </StackPanel>
         </Border>
 
-        <!-- Floating status toast -->
+        <!-- Floating status toast.
+             Panel.ZIndex=1000 forces it above the Settings overlay, the
+             launch / sign-out confirm modals, and the update notification.
+             IsHitTestVisible=False keeps the (purely informational) toast
+             from absorbing clicks — buttons under it (e.g. settings sidebar
+             when toast happens to overlap) still receive pointer events. -->
         <Border Classes="statusToast"
                 Classes.show="{Binding HasStatusMessage}"
                 HorizontalAlignment="Center" VerticalAlignment="Bottom"
@@ -306,7 +395,9 @@
                 BorderBrush="#28FFFFFF" BorderThickness="1"
                 CornerRadius="10"
                 BoxShadow="0 6 22 -2 #80000000"
-                Padding="20,14">
+                Padding="20,14"
+                ZIndex="1000"
+                IsHitTestVisible="False">
             <StackPanel Spacing="10">
                 <Grid ColumnDefinitions="Auto,*">
                     <Ellipse Grid.Column="0"
@@ -375,6 +466,11 @@
                                 CommandParameter="Appearance"
                                 Content="외관" />
                         <Button Classes="settingsCategory"
+                                Classes.selected="{Binding IsCategoryAccounts}"
+                                Command="{Binding SelectSettingsCategoryCommand}"
+                                CommandParameter="Accounts"
+                                Content="계정" />
+                        <Button Classes="settingsCategory"
                                 Classes.selected="{Binding IsCategoryMods}"
                                 Command="{Binding SelectSettingsCategoryCommand}"
                                 CommandParameter="Mods"
@@ -430,6 +526,12 @@
                                  contributes to the measured height. Avalonia's Grid was
                                  falling into a measure path where Collapsed siblings still
                                  influenced ExtentSize, capping the scrollable range. -->
+                            <!-- 28 left/right = content padding, 30 bottom = scroll tail. The TOP
+                                 value here does NOT drive where the titles sit — Avalonia's
+                                 ScrollContentPresenter doesn't translate this container's top margin
+                                 into visible offset (left margin is honored, top isn't). The title
+                                 top inset is applied on the sectionTitle style instead (a normal
+                                 child margin, which renders reliably). -->
                             <StackPanel Margin="28,30,28,30">
                                 <!-- General -->
                                 <StackPanel IsVisible="{Binding IsCategoryGeneral}" Spacing="20">
@@ -457,6 +559,89 @@
                                         <TextBlock Text="JPG / PNG / WEBP 지원"
                                                    Foreground="#80FFFFFF" FontSize="10" />
                                     </StackPanel>
+                                </StackPanel>
+
+                                <!-- Accounts: list of every signed-in Microsoft account, with the
+                                     same cards/⎋ logout pattern as AccountSelection plus a
+                                     "전체 로그아웃" escape hatch for clearing everything at once. -->
+                                <StackPanel IsVisible="{Binding IsCategoryAccounts}" Spacing="20"
+                                            MaxWidth="520" HorizontalAlignment="Left">
+                                    <TextBlock Text="계정" Classes="sectionTitle" />
+
+                                    <StackPanel Spacing="6">
+                                        <TextBlock Classes="label" Text="저장된 Microsoft 계정" />
+                                        <TextBlock Classes="hint"
+                                                   Text="계정을 클릭하면 활성 계정으로 전환되고 Play 화면으로 이동합니다. 오른쪽 ⎋ 버튼은 해당 계정만 로그아웃합니다."
+                                                   TextWrapping="Wrap" />
+                                    </StackPanel>
+
+                                    <!-- Re-uses SignedInAccountCards (same model as AccountSelection). -->
+                                    <ItemsControl ItemsSource="{Binding SignedInAccountCards}"
+                                                  IsVisible="{Binding HasAnyAccount}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Spacing="8" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:SignedInAccountCardViewModel">
+                                                <Border Background="#1F1F1F"
+                                                        BorderBrush="#28FFFFFF" BorderThickness="1"
+                                                        CornerRadius="8" Padding="10">
+                                                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                                                        <Border Grid.Column="0" Width="28" Height="28"
+                                                                CornerRadius="3" ClipToBounds="True"
+                                                                Background="#28FFFFFF"
+                                                                VerticalAlignment="Center">
+                                                            <Image Source="{Binding Avatar}"
+                                                                   Stretch="UniformToFill"
+                                                                   RenderOptions.BitmapInterpolationMode="None" />
+                                                        </Border>
+                                                        <Button Grid.Column="1"
+                                                                Classes="account-row"
+                                                                Command="{Binding SelectCommand}"
+                                                                HorizontalContentAlignment="Left"
+                                                                HorizontalAlignment="Stretch">
+                                                            <StackPanel Spacing="2" VerticalAlignment="Center">
+                                                                <TextBlock Text="{Binding Username}"
+                                                                           Foreground="White" FontSize="14"
+                                                                           FontWeight="SemiBold" />
+                                                                <TextBlock Text="현재 활성"
+                                                                           Foreground="#5BC54E" FontSize="10"
+                                                                           IsVisible="{Binding IsActive}" />
+                                                            </StackPanel>
+                                                        </Button>
+                                                        <Button Grid.Column="2" Classes="icon"
+                                                                Command="{Binding SignOutCommand}"
+                                                                ToolTip.Tip="이 계정 로그아웃"
+                                                                Width="28" Height="28" FontSize="12"
+                                                                VerticalAlignment="Center"
+                                                                Content="⎋" />
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <!-- Empty state for zero accounts. -->
+                                    <Border Background="#1A1A1A" BorderBrush="#22FFFFFF" BorderThickness="1"
+                                            CornerRadius="6" Padding="14"
+                                            IsVisible="{Binding !HasAnyAccount}">
+                                        <TextBlock Text="저장된 Microsoft 계정이 없습니다. 아래 버튼으로 새 계정을 추가하세요."
+                                                   Foreground="#A0FFFFFF" TextWrapping="Wrap" FontSize="12" />
+                                    </Border>
+
+                                    <Button Classes="ghost aligned" HorizontalAlignment="Left"
+                                            Command="{Binding AddAccountCommand}"
+                                            IsEnabled="{Binding !IsAuthenticating}"
+                                            Content="Microsoft 계정 추가" />
+
+                                    <!-- 전체 로그아웃 — hidden when nothing's signed in. -->
+                                    <Border Height="1" Background="#1AFFFFFF" Margin="0,4" />
+                                    <Button Classes="ghost aligned" HorizontalAlignment="Left"
+                                            Command="{Binding SignOutAllCommand}"
+                                            IsVisible="{Binding HasAnyAccount}"
+                                            Content="전체 로그아웃" />
                                 </StackPanel>
 
                                 <!-- Mods (Modrinth) — MaxWidth caps the whole panel at a sensible
@@ -810,14 +995,25 @@
                                     </StackPanel>
                                 </StackPanel>
 
-                                <!-- Instances: manager with cards + inline create form -->
-                                <StackPanel IsVisible="{Binding IsCategoryInstances}" Spacing="20">
-                                    <!-- Grid bottom margin matches the default sectionTitle margin
-                                         used by every other category, so the header → content gap
-                                         is identical across the settings panel. -->
-                                    <Grid ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,0,0,14">
+                                <!-- Instances: manager with cards + inline create form.
+                                     Cards stretch to fill the content column; a right Margin of 40
+                                     insets them slightly so they clear the scrollbar + ✕ close
+                                     button instead of sitting under them. NO top margin — the
+                                     "인스턴스" title must line up with every other category's
+                                     section title (the shared 28,30,28,30 parent padding owns the
+                                     top edge). -->
+                                <StackPanel IsVisible="{Binding IsCategoryInstances}" Spacing="20"
+                                            Margin="0,0,40,0">
+                                    <!-- Title is top-aligned (so its top edge matches every other
+                                         category's section title). The 3 action buttons are
+                                         bottom-aligned with a 16px top margin, dropping them below
+                                         the title to sit as a toolbar just above the instance list.
+                                         Grid bottom margin trimmed to 2 so that toolbar hugs the
+                                         first card — the title up top is unaffected. -->
+                                    <Grid ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,0,0,2">
                                         <TextBlock Grid.Column="0" Text="인스턴스"
-                                                   Classes="sectionTitle" Margin="0" />
+                                                   Classes="sectionTitle" Margin="0,18,0,0"
+                                                   VerticalAlignment="Top" />
                                         <!-- 3 action chips share the header row: import a backup .zip,
                                              import a Modrinth .mrpack, or create from scratch. All hidden
                                              while the inline create form is open. -->
@@ -825,24 +1021,28 @@
                                                 Command="{Binding ImportInstanceCommand}"
                                                 IsVisible="{Binding !IsCreatingInstance}"
                                                 Content="+ 백업 가져오기"
-                                                VerticalAlignment="Center"
-                                                Margin="0,0,6,0"
+                                                VerticalAlignment="Bottom"
+                                                Margin="0,16,6,0"
                                                 ToolTip.Tip="이전에 '내보내기'로 만든 .zip 백업을 새 인스턴스로 복원" />
                                         <Button Grid.Column="2" Classes="ghost"
                                                 Command="{Binding ImportMrpackCommand}"
                                                 IsVisible="{Binding !IsCreatingInstance}"
                                                 Content="+ 모드팩 가져오기"
-                                                VerticalAlignment="Center"
-                                                Margin="0,0,6,0"
+                                                VerticalAlignment="Bottom"
+                                                Margin="0,16,6,0"
                                                 ToolTip.Tip="Modrinth 모드팩(.mrpack)을 새 인스턴스로 임포트합니다" />
-                                        <!-- Right margin reserves space for the floating ✕ close button
-                                             (overlay icon: Margin 0,14,14,0 + 36 wide) so they don't overlap. -->
+                                        <!-- No right margin: the panel's own right Margin (40) plus the
+                                             shared content padding (28) already inset this button 68px
+                                             from the content edge. That clears the floating ✕ close
+                                             button (which occupies the rightmost ~50px) AND lines this
+                                             button's right edge up flush with the instance cards below,
+                                             which stretch to the same 68px inset. -->
                                         <Button Grid.Column="3" Classes="ghost"
                                                 Command="{Binding BeginCreateInstanceCommand}"
                                                 IsVisible="{Binding !IsCreatingInstance}"
                                                 Content="+ 새 인스턴스"
-                                                VerticalAlignment="Center"
-                                                Margin="0,0,36,0" />
+                                                VerticalAlignment="Bottom"
+                                                Margin="0,16,0,0" />
                                     </Grid>
 
                                     <!-- Inline create form -->
@@ -856,28 +1056,28 @@
                                                 <TextBlock Classes="label" Text="이름" />
                                                 <TextBox Text="{Binding NewInstanceName, Mode=TwoWay}"
                                                          PlaceholderText="예: 모드 통합팩"
-                                                         MaxLength="24"
-                                                         Width="320"
+                                                         MaxLength="12"
+                                                         Width="240"
                                                          HorizontalAlignment="Left">
                                                     <TextBox.KeyBindings>
                                                         <KeyBinding Gesture="Enter"
                                                                     Command="{Binding CreateInstanceCommand}" />
                                                     </TextBox.KeyBindings>
                                                 </TextBox>
-                                                <TextBlock Classes="hint" Text="최대 24자" />
+                                                <TextBlock Classes="hint" Text="최대 12자" />
                                             </StackPanel>
                                             <StackPanel Spacing="4">
                                                 <TextBlock Classes="label" Text="버전" />
                                                 <ComboBox ItemsSource="{Binding AvailableVersions}"
                                                           SelectedItem="{Binding NewInstanceVersion, Mode=TwoWay}"
-                                                          Width="320"
+                                                          Width="240"
                                                           HorizontalAlignment="Left" />
                                             </StackPanel>
                                             <StackPanel Spacing="4">
                                                 <TextBlock Classes="label" Text="모드로더" />
                                                 <ComboBox ItemsSource="{Binding ModloaderOptions}"
                                                           SelectedItem="{Binding NewInstanceModloaderName, Mode=TwoWay}"
-                                                          Width="320"
+                                                          Width="240"
                                                           HorizontalAlignment="Left" />
                                             </StackPanel>
                                             <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
@@ -913,19 +1113,65 @@
                                                 <Border Background="#1F1F1F" CornerRadius="8" Padding="14"
                                                         BorderBrush="#28FFFFFF" BorderThickness="1">
                                                     <Panel>
-                                                        <!-- Default: info + action icons -->
+                                                        <!-- Default: info + action icons. ColumnSpacing=20 keeps
+                                                             the action button cluster a comfortable distance from
+                                                             the text content even when the card width hugs its
+                                                             container's MaxWidth. -->
                                                         <Grid IsVisible="{Binding IsDefaultMode}"
-                                                              ColumnDefinitions="*,Auto">
+                                                              ColumnDefinitions="*,Auto"
+                                                              ColumnSpacing="20">
                                                             <StackPanel Grid.Column="0" Spacing="3"
                                                                         VerticalAlignment="Center">
-                                                                <TextBlock Text="{Binding Name}"
-                                                                           Foreground="White" FontSize="14"
-                                                                           FontWeight="SemiBold" />
+                                                                <!-- Click-to-edit name (Button.name-edit's hover halo signals
+                                                                     interactivity). Swaps to a tight inline TextBox while
+                                                                     IsRenaming (MaxLength=12; box hugs current text). -->
+                                                                <Button Classes="name-edit"
+                                                                        IsVisible="{Binding !IsRenaming}"
+                                                                        Command="{Binding BeginRenameCommand}"
+                                                                        ToolTip.Tip="클릭하여 이름 변경">
+                                                                    <TextBlock Text="{Binding Name}"
+                                                                               Foreground="White" FontSize="14"
+                                                                               FontWeight="SemiBold" />
+                                                                </Button>
+                                                                <TextBox IsVisible="{Binding IsRenaming}"
+                                                                         Classes="inline-name"
+                                                                         Text="{Binding RenameInput, Mode=TwoWay}"
+                                                                         MaxLength="12"
+                                                                         FontSize="14" FontWeight="SemiBold"
+                                                                         AttachedToVisualTree="InlineNameBox_AttachedToVisualTree">
+                                                                    <TextBox.KeyBindings>
+                                                                        <KeyBinding Gesture="Enter"
+                                                                                    Command="{Binding ConfirmRenameCommand}" />
+                                                                        <KeyBinding Gesture="Escape"
+                                                                                    Command="{Binding CancelRenameCommand}" />
+                                                                    </TextBox.KeyBindings>
+                                                                </TextBox>
                                                                 <TextBlock Foreground="#A0FFFFFF" FontSize="11">
                                                                     <Run Text="{Binding ModloaderLabel}" />
                                                                     <Run Text=" · " />
                                                                     <Run Text="{Binding VersionId}" />
                                                                 </TextBlock>
+                                                                <!-- Account row: 16×16 player head from Minotar + username +
+                                                                     ⇄ icon (계정 전환). Clicking the icon opens the inline
+                                                                     account picker sub-form (IsConfiguringAccount below).
+                                                                     Spacing 3 + edit-icon's zero margin keeps the icon
+                                                                     visually adjacent to the username. -->
+                                                                <StackPanel Orientation="Horizontal" Spacing="3"
+                                                                            VerticalAlignment="Center">
+                                                                    <Border Width="16" Height="16" CornerRadius="2"
+                                                                            ClipToBounds="True" Background="#28FFFFFF">
+                                                                        <Image Source="{Binding AccountAvatar}"
+                                                                               Stretch="UniformToFill"
+                                                                               RenderOptions.BitmapInterpolationMode="None" />
+                                                                    </Border>
+                                                                    <TextBlock Text="{Binding AccountDisplayName}"
+                                                                               Foreground="#C8FFFFFF" FontSize="11"
+                                                                               VerticalAlignment="Center" />
+                                                                    <Button Classes="edit-icon"
+                                                                            Command="{Binding BeginConfigureAccountCommand}"
+                                                                            ToolTip.Tip="계정 변경"
+                                                                            Content="⇄" />
+                                                                </StackPanel>
                                                                 <TextBlock Text="{Binding LastPlayedLabel}"
                                                                            Foreground="#70FFFFFF" FontSize="10" />
                                                                 <!-- Per-instance JVM overrides shown subtly so the user knows
@@ -944,13 +1190,14 @@
                                                                 <Button Classes="ghost"
                                                                         Command="{Binding OpenFolderCommand}"
                                                                         Content="폴더 열기" />
-                                                                <Button Classes="ghost"
-                                                                        Command="{Binding BeginRenameCommand}"
-                                                                        Content="이름 변경" />
+                                                                <!-- "고급" 버튼은 설정 → 고급의 ShowInstanceAdvancedButton
+                                                                     토글이 켜져야 보임. DataTemplate 내부라 ancestor
+                                                                     MainWindowViewModel에서 binding 가져옴. -->
                                                                 <Button Classes="ghost"
                                                                         Command="{Binding BeginConfigureJvmCommand}"
                                                                         Content="고급"
-                                                                        ToolTip.Tip="인스턴스별 메모리 / JVM args 설정" />
+                                                                        ToolTip.Tip="인스턴스별 메모리 / JVM args 설정"
+                                                                        IsVisible="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).ShowInstanceAdvancedButton}" />
                                                                 <Button Classes="ghost"
                                                                         Command="{Binding DuplicateCommand}"
                                                                         Content="복제" />
@@ -964,26 +1211,10 @@
                                                             </StackPanel>
                                                         </Grid>
 
-                                                        <!-- Rename -->
-                                                        <StackPanel IsVisible="{Binding IsRenaming}" Spacing="8">
-                                                            <TextBlock Classes="label" Text="이름 변경" />
-                                                            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
-                                                                <TextBox Grid.Column="0"
-                                                                         Text="{Binding RenameInput, Mode=TwoWay}"
-                                                                         MaxLength="40">
-                                                                    <TextBox.KeyBindings>
-                                                                        <KeyBinding Gesture="Enter"
-                                                                                    Command="{Binding ConfirmRenameCommand}" />
-                                                                        <KeyBinding Gesture="Escape"
-                                                                                    Command="{Binding CancelRenameCommand}" />
-                                                                    </TextBox.KeyBindings>
-                                                                </TextBox>
-                                                                <Button Grid.Column="1" Classes="ghost"
-                                                                        Command="{Binding CancelRenameCommand}" Content="취소" />
-                                                                <Button Grid.Column="2" Classes="ghost"
-                                                                        Command="{Binding ConfirmRenameCommand}" Content="확인" />
-                                                            </Grid>
-                                                        </StackPanel>
+                                                        <!-- Rename is now inline on the name TextBlock above; the
+                                                             separate sub-form was removed in #108 so a click-on-name
+                                                             handles the whole edit flow. -->
+
 
                                                         <!-- Delete confirm -->
                                                         <StackPanel IsVisible="{Binding IsConfirmingDelete}" Spacing="8">
@@ -1008,7 +1239,7 @@
                                                             <TextBlock Text="고급 설정"
                                                                        Foreground="White" FontSize="13"
                                                                        FontWeight="SemiBold" />
-                                                            <TextBlock Text="비워두면 Settings → 고급의 전역 값을 사용합니다."
+                                                            <TextBlock Text="비워두면 설정 → 고급의 전역 값을 사용합니다."
                                                                        Foreground="#A0FFFFFF" FontSize="11"
                                                                        TextWrapping="Wrap" />
                                                             <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
@@ -1029,12 +1260,68 @@
                                                                          AcceptsReturn="False"
                                                                          PlaceholderText="공백으로 구분" />
                                                             </StackPanel>
+
                                                             <StackPanel Orientation="Horizontal" Spacing="8"
                                                                         HorizontalAlignment="Right">
                                                                 <Button Classes="ghost"
                                                                         Command="{Binding CancelJvmConfigCommand}" Content="취소" />
                                                                 <Button Classes="ghost"
                                                                         Command="{Binding SaveJvmConfigCommand}" Content="저장" />
+                                                            </StackPanel>
+                                                        </StackPanel>
+
+                                                        <!-- Account picker sub-form. Opens via the small ✎ icon next to
+                                                             the avatar+username row on the default card. Card list +
+                                                             optional offline username; cancel / save buttons mirror the
+                                                             JVM form. -->
+                                                        <StackPanel IsVisible="{Binding IsConfiguringAccount}" Spacing="10">
+                                                            <TextBlock Text="계정 변경"
+                                                                       Foreground="White" FontSize="13"
+                                                                       FontWeight="SemiBold" />
+                                                            <TextBlock Text="이 인스턴스를 실행할 때 사용할 계정을 골라주세요."
+                                                                       Foreground="#A0FFFFFF" FontSize="11"
+                                                                       TextWrapping="Wrap" />
+                                                            <ListBox Classes="choices"
+                                                                     ItemsSource="{Binding AccountChoices}"
+                                                                     SelectedItem="{Binding SelectedAccountChoice, Mode=TwoWay}">
+                                                                <ListBox.ItemTemplate>
+                                                                    <DataTemplate x:DataType="vm:AccountChoice">
+                                                                        <StackPanel Orientation="Horizontal" Spacing="10"
+                                                                                    VerticalAlignment="Center">
+                                                                            <Border Width="28" Height="28"
+                                                                                    CornerRadius="3" ClipToBounds="True"
+                                                                                    Background="#28FFFFFF"
+                                                                                    VerticalAlignment="Center"
+                                                                                    IsVisible="{Binding HasAvatar}">
+                                                                                <Image Source="{Binding Avatar}"
+                                                                                       Stretch="UniformToFill"
+                                                                                       RenderOptions.BitmapInterpolationMode="None" />
+                                                                            </Border>
+                                                                            <TextBlock Text="{Binding Label}"
+                                                                                       Foreground="White" FontSize="13"
+                                                                                       FontWeight="SemiBold"
+                                                                                       VerticalAlignment="Center" />
+                                                                        </StackPanel>
+                                                                    </DataTemplate>
+                                                                </ListBox.ItemTemplate>
+                                                            </ListBox>
+
+                                                            <!-- Offline 닉네임 (only when 오프라인 모드 row is selected). -->
+                                                            <StackPanel Spacing="4"
+                                                                        IsVisible="{Binding IsSelectedOfflineChoice}">
+                                                                <TextBlock Classes="label" Text="오프라인 닉네임 (선택)" />
+                                                                <controls:UsernameTextBox
+                                                                         Text="{Binding OfflineUsernameInput, Mode=TwoWay}"
+                                                                         MaxLength="16"
+                                                                         PlaceholderText="비워두면 전역 사용자명 사용" />
+                                                            </StackPanel>
+
+                                                            <StackPanel Orientation="Horizontal" Spacing="8"
+                                                                        HorizontalAlignment="Right">
+                                                                <Button Classes="ghost"
+                                                                        Command="{Binding CancelAccountConfigCommand}" Content="취소" />
+                                                                <Button Classes="ghost"
+                                                                        Command="{Binding SaveAccountConfigCommand}" Content="저장" />
                                                             </StackPanel>
                                                         </StackPanel>
                                                     </Panel>
@@ -1072,6 +1359,18 @@
                                                  AcceptsReturn="False" />
                                         <TextBlock Text="공백으로 구분. 메모리 인자 다음, 버전 JVM 인자 전에 삽입됨."
                                                    Foreground="#80FFFFFF" FontSize="10" />
+                                    </StackPanel>
+
+                                    <!-- 인스턴스별 고급 옵션 노출 토글. 기본 OFF —
+                                         인스턴스 카드의 "고급" 버튼은 이 토글이 켜져야 보임. -->
+                                    <StackPanel Spacing="6">
+                                        <TextBlock Classes="label" Text="인스턴스 옵션" />
+                                        <CheckBox IsChecked="{Binding ShowInstanceAdvancedButton, Mode=TwoWay}"
+                                                  Content="인스턴스별 '고급' 버튼 표시"
+                                                  Foreground="#DDFFFFFF" />
+                                        <TextBlock Text="켜면 설정 → 인스턴스의 각 카드에 메모리·JVM args를 개별 설정하는 '고급' 버튼이 나타납니다."
+                                                   Foreground="#80FFFFFF" FontSize="10"
+                                                   TextWrapping="Wrap" />
                                     </StackPanel>
 
                                     <Button Classes="ghost aligned" HorizontalAlignment="Left"
@@ -1400,6 +1699,77 @@
                     <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
                         <Button Classes="ghost"
                                 Command="{Binding DismissLaunchWarningCommand}" Content="확인" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Border>
+
+        <!-- =====================================================================
+             Sign-out confirmation overlay.
+             Pops when ⎋ is clicked on any account card (Play view profile box,
+             AccountSelection list, Settings → 계정 list) or 전체 로그아웃 is
+             clicked in Settings → 계정. The actual removal runs only after the
+             user clicks 로그아웃 here — cancel just closes the modal.
+             ===================================================================== -->
+        <Border IsVisible="{Binding IsSignOutConfirmOpen}"
+                Background="#C0000000"
+                Focusable="True">
+            <Border.KeyBindings>
+                <KeyBinding Gesture="Escape" Command="{Binding CancelSignOutCommand}" />
+            </Border.KeyBindings>
+            <Border Width="380"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Background="#181818" CornerRadius="14"
+                    BorderBrush="#2A2A2A" BorderThickness="1"
+                    BoxShadow="0 12 36 -2 #B0000000"
+                    Padding="24">
+                <StackPanel Spacing="14">
+                    <TextBlock Text="로그아웃 확인"
+                               Foreground="White" FontSize="15" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding PendingSignOut.Message}"
+                               Foreground="#C8FFFFFF" FontSize="13"
+                               TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                        <Button Classes="ghost"
+                                Command="{Binding CancelSignOutCommand}" Content="취소" />
+                        <Button Classes="ghost"
+                                Command="{Binding ConfirmSignOutCommand}" Content="로그아웃" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Border>
+
+        <!-- =====================================================================
+             Per-instance account conflict overlay.
+             Pops when the user picks a different account while a Specific-bound
+             instance is selected on the Play view (instance mode). 계속 applies
+             the switch (active account changes; the instance still launches with
+             its own bound account). 취소 leaves the active account as the bound
+             one, keeping the Play view's display consistent with what launches.
+             ===================================================================== -->
+        <Border IsVisible="{Binding IsAccountConflictOpen}"
+                Background="#C0000000"
+                Focusable="True">
+            <Border.KeyBindings>
+                <KeyBinding Gesture="Escape" Command="{Binding CancelAccountSwitchCommand}" />
+            </Border.KeyBindings>
+            <Border Width="400"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Background="#181818" CornerRadius="14"
+                    BorderBrush="#2A2A2A" BorderThickness="1"
+                    BoxShadow="0 12 36 -2 #B0000000"
+                    Padding="24">
+                <StackPanel Spacing="14">
+                    <TextBlock Text="계정이 인스턴스와 다릅니다"
+                               Foreground="White" FontSize="15" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding PendingAccountConflict.Message}"
+                               Foreground="#C8FFFFFF" FontSize="13"
+                               TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                        <Button Classes="ghost"
+                                Command="{Binding CancelAccountSwitchCommand}" Content="취소" />
+                        <Button Classes="ghost"
+                                Command="{Binding ConfirmAccountSwitchCommand}" Content="계속" />
                     </StackPanel>
                 </StackPanel>
             </Border>
